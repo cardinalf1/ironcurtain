@@ -125,17 +125,28 @@ def render_strategic_map(highlight_target: Optional[str] = None):
     geojson_features = []
     for feature in WORLD_GEOJSON["features"]:
         feat = dict(feature)
-        c_name = feat["properties"]["name"]
+        feat["properties"] = dict(feat.get("properties", {}))
+        c_name = feat["properties"].get("name", "")
         
         if c_name in countries:
-            align = countries[c_name]["alignment"]
+            c = countries[c_name]
+            align = c["alignment"]
+            status_text = f"Major Power • Treasury: ${c['treasury']}M • Warheads: {c['bombs']}"
         elif c_name in buffers:
-            align = buffers[c_name]["alignment"]
+            b = buffers[c_name]
+            align = b["alignment"]
+            status_text = "Contested Frontier Buffer State"
         else:
             align = 0.0
+            status_text = "Non-Aligned Sovereign Territory"
+
+        align_text = f"{align:+.1f} ({'Pro-Western Alliance' if align > 0.2 else ('Pro-Soviet Bloc' if align < -0.2 else 'Non-Aligned')})"
 
         is_hl = (c_name == highlight_target)
         feat["properties"]["fill_color"] = [255, 176, 0, 240] if is_hl else alignment_to_rgb(align)
+        feat["properties"]["name"] = c_name
+        feat["properties"]["status"] = status_text
+        feat["properties"]["alignment"] = align_text
         geojson_features.append(feat)
 
     geojson_data = {"type": "FeatureCollection", "features": geojson_features}
@@ -149,7 +160,7 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         extruded=False,
         get_fill_color="properties.fill_color",
         get_line_color=[38, 51, 69, 255],
-        line_width_min_pixels=1.1
+        line_width_min_pixels=1.2
     )
 
     capitals_data = []
@@ -157,10 +168,12 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         is_hl = (name == highlight_target)
         capitals_data.append({
             "name": name,
+            "status": f"Capital: {c['capital']} • Stockpile: {c['bombs']} Warheads • Treasury: ${c['treasury']}M",
+            "alignment": f"Alignment: {c['alignment']:+.1f}",
             "lat": c["lat"],
             "lon": c["lon"],
             "color": [255, 255, 255, 255] if is_hl else ([248, 81, 73, 230] if c["nuclear"] else [56, 139, 253, 200]),
-            "radius": 340000 if is_hl else (240000 if c["nuclear"] else 160000)
+            "radius": 360000 if is_hl else (260000 if c["nuclear"] else 180000)
         })
 
     capitals_layer = pdk.Layer(
@@ -172,23 +185,65 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         pickable=True
     )
 
-    # Active map events flight arcs
-    map_events = state_engine.get_map_events()
+    # 3D Geopolitical Strategic Arcs (Transatlantic, Sino-Soviet, Deterrence, Operations)
     arc_data = []
-    for ev in map_events[:14]:
+    
+    # 1. Permanent Strategic Geopolitical Lifelines
+    base_arcs = [
+        ("USA", "United Kingdom", [56, 139, 253, 220], "Transatlantic Special Relationship"),
+        ("United Kingdom", "France", [56, 139, 253, 190], "Western European Defense Corridor"),
+        ("USA", "France", [56, 139, 253, 190], "Marshall Plan Economic Bridge"),
+        ("USSR", "China", [248, 81, 73, 230], "Sino-Soviet Treaty Axis"),
+        ("USA", "USSR", [210, 153, 34, 250], "Nuclear Deterrence Standoff"),
+        ("USSR", "Yugoslavia", [163, 113, 247, 200], "Danubian Diplomatic Lifeline"),
+    ]
+    for src_n, tgt_n, col, desc in base_arcs:
+        if src_n in countries and tgt_n in countries:
+            s = countries[src_n]
+            t = countries[tgt_n]
+            arc_data.append({
+                "from_lon": s["lon"], "from_lat": s["lat"],
+                "to_lon": t["lon"], "to_lat": t["lat"],
+                "color": col,
+                "name": f"{src_n} ➔ {tgt_n}",
+                "status": desc,
+                "alignment": "Strategic Axis"
+            })
+
+    # 2. Dynamic map events flight arcs
+    map_events = state_engine.get_map_events()
+    for ev in map_events[:16]:
         src_name = ev.get("source_name")
         tgt_name = ev.get("target_name")
         if src_name in countries and tgt_name in countries:
             src = countries[src_name]
             tgt = countries[tgt_name]
             ev_type = ev.get("event_type", "")
-            arc_color = [248, 81, 73, 255] if "strike" in ev_type else ([210, 153, 34, 230] if "espionage" in ev_type else [46, 160, 67, 220])
+            arc_color = [248, 81, 73, 255] if "strike" in ev_type else ([210, 153, 34, 250] if "espionage" in ev_type else [46, 160, 67, 240])
             arc_data.append({
-                "from_lon": src["lon"],
-                "from_lat": src["lat"],
-                "to_lon": tgt["lon"],
-                "to_lat": tgt["lat"],
-                "color": arc_color
+                "from_lon": src["lon"], "from_lat": src["lat"],
+                "to_lon": tgt["lon"], "to_lat": tgt["lat"],
+                "color": arc_color,
+                "name": f"ACTIVE OPERATION: {src_name} ➔ {tgt_name}",
+                "status": ev.get("description", "Field Operation"),
+                "alignment": "Operational Vector"
+            })
+
+    # 3. Active Spy Network Infiltration Arcs
+    active_spies = state_engine.get_active_agents() if hasattr(state_engine, 'get_active_agents') else []
+    for sp in active_spies:
+        o = sp.get("owner_country")
+        t = sp.get("target")
+        if o in countries and t in countries:
+            s = countries[o]
+            tgt = countries[t]
+            arc_data.append({
+                "from_lon": s["lon"], "from_lat": s["lat"],
+                "to_lon": tgt["lon"], "to_lat": tgt["lat"],
+                "color": [210, 153, 34, 255],
+                "name": f"ACTIVE ESPIONAGE RING: {o} ➔ {t}",
+                "status": f"Covert Intelligence Operation ({sp.get('mission', 'Infiltration')})",
+                "alignment": "HUMINT Vector"
             })
 
     arc_layer = pdk.Layer(
@@ -198,15 +253,34 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         get_target_position=["to_lon", "to_lat"],
         get_source_color="color",
         get_target_color="color",
-        get_width=3,
+        get_width=3.5,
         pickable=True
     )
 
-    view_state = pdk.ViewState(latitude=32.0, longitude=25.0, zoom=1.1, min_zoom=0.8, max_zoom=6)
+    view_state = pdk.ViewState(
+        latitude=34.0,
+        longitude=18.0,
+        zoom=1.35,
+        pitch=42,
+        bearing=-10,
+        min_zoom=0.8,
+        max_zoom=6.0
+    )
+
     deck = pdk.Deck(
         layers=[geojson_layer, arc_layer, capitals_layer],
         initial_view_state=view_state,
-        tooltip={"text": "{display_label}\n{alignment_score}"},
+        tooltip={
+            "html": "<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 12px; color: #e6edf3; background: #0a0d12; border: 1px solid #30363d; border-radius: 4px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.6);'>"
+                    "<b style='color: #58a6ff; font-size: 13px;'>{name}</b><br/>"
+                    "<span style='color: #8b949e;'>{status}</span><br/>"
+                    "<span style='color: #d29922; font-size: 11px;'><b>{alignment}</b></span>"
+                    "</div>",
+            "style": {
+                "backgroundColor": "transparent",
+                "border": "none"
+            }
+        },
         map_style=None
     )
     st.pydeck_chart(deck, use_container_width=True)
@@ -387,9 +461,8 @@ if selected_view == "🏛️ PROJECTOR / UN JOINT CHIEFS":
             state_engine.set_phase("DIRECTIVES")
             st.rerun()
 
-
 # ==============================================================================
-# VIEW 2: STUDENT NATION TERMINAL (C2 INTELLIGENCE DOSSIER & ADVISER TELEX)
+# VIEW 2: STUDENT NATION TERMINAL (AI ADVISER CENTRAL HUB, 3D MAP, RED PHONE, NOTIFICATIONS)
 # ==============================================================================
 else:
     country_name = selected_view.replace("🚩 ", "").strip()
@@ -401,26 +474,166 @@ else:
     persona = ADVISER_PERSONAS.get(country_name, {
         "name": f"Chief Strategic Adviser of {country_name}",
         "title": "Diplomatic & Defense Envoy",
-        "system_prompt": "You advise the leadership."
+        "system_prompt": "You advise the national leadership."
     })
 
-    # Terminal Header
+    # Prepare Classified Intelligence Dossiers for AI Adviser
+    briefings = []
+    for other_c in countries.keys():
+        if other_c != country_name:
+            dos = state_engine.get_country_dossier(country_name, other_c)
+            has_spy = dos.get("has_active_spy", False)
+            briefings.append(
+                f"- {other_c}: Stockpile: {dos.get('bombs_display', 'Unknown')}, "
+                f"Capability: {dos.get('nuclear_status', 'Unknown')}, "
+                f"Treasury: {dos.get('treasury_display', 'Unknown')}, "
+                f"Confidence: {dos.get('confidence_label', 'Unknown')}, "
+                f"Active HUMINT Spy: {'YES (INFILTRATED)' if has_spy else 'NO (SIGNALS ONLY)'}"
+            )
+    intel_briefings_str = "\n".join(briefings)
+
+    # --------------------------------------------------------------------------
+    # MODAL DIALOG 1: RED PHONE (HOTLINE)
+    # --------------------------------------------------------------------------
+    @st.dialog("📞 RED PHONE: ENCRYPTED DIPLOMATIC HOTLINE")
+    def show_red_phone_dialog(curr_country, all_countries):
+        st.caption("Direct encrypted telex channel between superpower leaderships. Warning: Enemy HUMINT spy networks have a 35% chance to tap and leak transmissions!")
+        
+        other_countries = [c for c in all_countries.keys() if c != curr_country]
+        h_target = st.selectbox("RECIPIENT POWER:", other_countries, key="dlg_phone_target")
+        h_text = st.text_input("ENCRYPTED TRANSMISSION:", key="dlg_phone_msg", placeholder=f"Draft diplomatic communique to {h_target}...")
+        
+        if st.button("DISPATCH ENCRYPTED CABLE 📨", type="primary", use_container_width=True):
+            if h_text.strip():
+                _, note, intercepted = state_engine.send_hotline_message(curr_country, h_target, h_text.strip())
+                st.success(note)
+                st.rerun()
+            else:
+                st.warning("Please type a message before transmitting.")
+
+        st.markdown("---")
+        st.markdown("###### 📜 ARCHIVED HOTLINE CABLES:")
+        hotline_logs = state_engine.get_hotline_messages(curr_country)
+        if not hotline_logs:
+            st.caption("No diplomatic cables on this frequency.")
+        else:
+            for m in hotline_logs:
+                intercept_tag = "<span style='color:var(--accent-red); font-weight: 700;'>[INTERCEPTED]</span>" if m.get("is_intercepted") else "<span style='color:var(--accent-green); font-weight: 700;'>[ENCRYPTED]</span>"
+                st.markdown(
+                    f"<div class='cable-card'>"
+                    f"<div class='cable-header'><span>FROM: <b>{m['sender']}</b> ➔ TO: <b>{m['recipient']}</b></span><span>{intercept_tag}</span></div>"
+                    f"<div style='font-size: 0.88rem; font-family: var(--font-mono); margin-top: 4px;'>{m['content']}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+    # --------------------------------------------------------------------------
+    # MODAL DIALOG 2: NOTIFICATION CENTRE
+    # --------------------------------------------------------------------------
+    @st.dialog("📡 C2 NOTIFICATION & FIELD CABLE CENTRE")
+    def show_notifications_dialog(curr_country):
+        tab_cables, tab_unsc, tab_dispatches = st.tabs([
+            "🕵️ DECRYPTED SPY CABLES",
+            "🇺🇳 UN SECURITY COUNCIL",
+            "📰 WORLD & CRISIS DISPATCHES"
+        ])
+
+        with tab_cables:
+            cables = state_engine.get_intel_cables(curr_country)
+            if not cables:
+                st.info("No decrypted field spy cables on file. Deploy intelligence operatives via your AI adviser to monitor foreign atomic programs.")
+            else:
+                for c in cables:
+                    st.markdown(
+                        f"<div class='cable-card cable-card-secret'>"
+                        f"<div class='cable-header'><span>TARGET: <b>{c['target']}</b></span><span class='badge-c2 badge-secret'>{c['confidence_rating']}</span></div>"
+                        f"<b>{c['intel_summary']}</b><br/>"
+                        f"<div style='font-size: 0.9rem; font-family: var(--font-mono); color: var(--accent-amber); margin-top: 4px;'>{c['apparent_data']}</div>"
+                        f"<div style='font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;'>ASSET STATUS: {c['agent_status']} • TURN {c['turn']}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+        with tab_unsc:
+            resolutions = state_engine.get_unsc_resolutions()
+            if not resolutions:
+                st.caption("No resolutions currently pending before the council.")
+            else:
+                for res in resolutions:
+                    st.markdown(
+                        f"<div class='cable-card cable-card-unsc'>"
+                        f"<div class='cable-header'><span>RESOLUTION #{res['id']} • TARGET: {res['target']}</span><span>STATUS: <b>{res['status']}</b></span></div>"
+                        f"<b>{res['title']}</b><br/>"
+                        f"<span style='font-size: 0.85rem;'>{res['description']}</span><br/>"
+                        f"<span style='font-size: 0.8rem; color: var(--text-secondary);'>Votes Recorded: {res['votes']}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                    if res["status"] == "PENDING":
+                        is_p5 = curr_country in UNSC_PERM_5
+                        v_col1, v_col2 = st.columns(2)
+                        with v_col1:
+                            if st.button("Vote YES", key=f"dlg_v_yes_{res['id']}", use_container_width=True):
+                                state_engine.vote_unsc_resolution(res["id"], curr_country, "YES")
+                                st.rerun()
+                        with v_col2:
+                            lbl = "VETO (NO)" if is_p5 else "Vote NO"
+                            if st.button(lbl, key=f"dlg_v_no_{res['id']}", use_container_width=True):
+                                state_engine.vote_unsc_resolution(res["id"], curr_country, "NO")
+                                st.rerun()
+
+        with tab_dispatches:
+            events = state_engine.get_random_events()
+            for ev in events[:4]:
+                st.markdown(
+                    f"<div class='cable-card cable-card-secret'>"
+                    f"<div class='cable-header'><span>YEAR {ev['year']} • STRATEGIC EVENT</span><span>{ev['event_type']}</span></div>"
+                    f"<b>{ev['title']}</b><br/>"
+                    f"<span style='font-size: 0.85rem; color: var(--text-secondary);'>{ev['description']}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+            news = state_engine.get_news(limit=10)
+            for n in news:
+                st.markdown(
+                    f"<div class='cable-card'>"
+                    f"<div class='cable-header'><span>YEAR {n['year']}</span><span>GLOBAL TELEGRAPH</span></div>"
+                    f"<b>{n['headline']}</b><br/>"
+                    f"<span style='font-size: 0.85rem; color: var(--text-secondary);'>{n['body']}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+    # --------------------------------------------------------------------------
+    # TOP HEADER & POPUP ACTION BUTTONS
+    # --------------------------------------------------------------------------
     is_p5 = country_name in UNSC_PERM_5
-    st.markdown(
-        f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;'>"
-        f"<div>"
-        f"<h2 style='margin: 0;'>{country_name.upper()} // STRATEGIC COMMAND</h2>"
-        f"<span style='color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem;'>"
-        f"HEAD OF MISSION: {persona['name']} ({persona['title']}) • CAPITAL: {c_data['capital']}"
-        f"</span>"
-        f"</div>"
-        f"<div>"
-        f"<span class='badge-c2 {'badge-unsc' if is_p5 else 'badge-conf'}'>{'UNSC PERM-5 (VETO)' if is_p5 else 'UN GENERAL MEMBER'}</span> "
-        f"<span class='badge-c2 {'badge-secret' if c_data['nuclear'] else 'badge-conf'}'>{'ATOMIC CAPABLE' if c_data['nuclear'] else 'CONVENTIONAL'}</span>"
-        f"</div>"
-        f"</div>",
-        unsafe_allow_html=True
-    )
+    cables_count = len(state_engine.get_intel_cables(country_name))
+
+    col_hdr_left, col_hdr_right = st.columns([7, 5])
+    with col_hdr_left:
+        st.markdown(
+            f"<div>"
+            f"<h2 style='margin: 0;'>{country_name.upper()} // STRATEGIC COMMAND</h2>"
+            f"<span style='color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem;'>"
+            f"HEAD OF MISSION: <b>{persona['name']}</b> ({persona['title']}) • CAPITAL: {c_data['capital']}"
+            f"</span><br/>"
+            f"<span class='badge-c2 {'badge-unsc' if is_p5 else 'badge-conf'}'>{'UNSC PERM-5 (VETO)' if is_p5 else 'UN GENERAL MEMBER'}</span> "
+            f"<span class='badge-c2 {'badge-secret' if c_data['nuclear'] else 'badge-conf'}'>{'ATOMIC CAPABLE' if c_data['nuclear'] else 'CONVENTIONAL'}</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+    with col_hdr_right:
+        st.markdown("<div style='display: flex; gap: 8px; justify-content: flex-end; align-items: center; height: 100%;'>", unsafe_allow_html=True)
+        btn_c1, btn_c2 = st.columns(2)
+        with btn_c1:
+            if st.button("📞 RED PHONE HOTLINE", use_container_width=True):
+                show_red_phone_dialog(country_name, countries)
+        with btn_c2:
+            if st.button(f"🔔 NOTIFICATIONS ({cables_count})", use_container_width=True):
+                show_notifications_dialog(country_name)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Telemetry Ribbon
     t1, t2, t3, t4, t5, t6 = st.columns(6)
@@ -437,275 +650,159 @@ else:
     with t6:
         st.markdown(f"<div class='metric-box'><div class='metric-label'>TENSION</div><div class='metric-val'>{c_data['tension']}%</div></div>", unsafe_allow_html=True)
 
-    # Main Workspace: 8 cols Dossier & Map, 4 cols Adviser Command Log
-    col_main, col_adviser = st.columns([8, 4])
-
-    with col_main:
-        st.markdown("#### 📂 PALANTIR C2 // TARGET INTELLIGENCE DOSSIER")
-
-        # Territory Inspector Selection
+    # --------------------------------------------------------------------------
+    # SECTION 1: THE 3D STRATEGIC MAP & TARGET INSPECTOR
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    col_map_hdr, col_map_sel = st.columns([6, 6])
+    with col_map_hdr:
+        st.markdown("#### 🌐 3D GLOBAL SITUATION & STRATEGIC ARCS")
+    with col_map_sel:
         all_territories = list(countries.keys()) + list(buffers.keys())
-        default_idx = 1 if country_name == "USA" else 0
+        default_target = "USSR" if country_name != "USSR" else "USA"
         inspected_target = st.selectbox(
-            "SELECT GEOPOLITICAL TARGET FOR CLASSIFIED BRIEFING:",
+            "SELECT TARGET NATION FOR SATELLITE HIGHLIGHT & INTELLIGENCE DOSSIER:",
             all_territories,
-            index=default_idx
+            index=all_territories.index(default_target) if default_target in all_territories else 0
         )
 
-        dossier = state_engine.get_country_dossier(country_name, inspected_target)
+    # Quick Dossier Banner for the selected target
+    target_dossier = state_engine.get_country_dossier(country_name, inspected_target)
+    st.markdown(
+        f"<div class='dossier-card' style='margin-bottom: 8px; padding: 10px 14px;'>"
+        f"<div style='display: flex; justify-content: space-between; align-items: center;'>"
+        f"<div>"
+        f"<b>TARGET: {inspected_target.upper()}</b> • "
+        f"Atomic Stockpile: <b style='color: var(--accent-amber);'>{target_dossier.get('bombs_display', 'Classified')}</b> • "
+        f"Capability: <b>{target_dossier.get('nuclear_status', 'Conventional')}</b> • "
+        f"Treasury: <b>{target_dossier.get('treasury_display', 'Unknown')}</b>"
+        f"</div>"
+        f"<div>"
+        f"<span class='badge-c2 badge-secret'>{target_dossier.get('confidence_label', 'CONFIDENTIAL')}</span> "
+        f"<span style='font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-secondary);'>ACTIVE SPY: <b>{'YES' if target_dossier.get('has_active_spy') else 'NO'}</b></span>"
+        f"</div>"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
-        # Classified Dossier Card
+    # Render The 3D Map (with 3D arcs, capitals, fixed labels, pitch/bearing)
+    render_strategic_map(highlight_target=inspected_target)
+
+    # --------------------------------------------------------------------------
+    # SECTION 2: THE AI ADVISER CONSOLE (THE CENTRAL POINT OF EVERYTHING)
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown(f"#### 🎙️ AI ADVISER CONSOLE // {persona['name'].upper()}")
+    st.caption(f"Instruct your senior adviser in plain English. Inquire about foreign nuclear stockpiles, authorize espionage operations, commission warheads, or negotiate treaties.")
+
+    # Quick Tactical Directive Chips
+    st.markdown("<span style='font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);'>QUICK TACTICAL DIRECTIVES:</span>", unsafe_allow_html=True)
+    c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns(5)
+    with c_btn1:
+        if st.button(f"🕵️ Spy on {inspected_target} ($50M)", use_container_width=True):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Deploy an intelligence spy network to {inspected_target} ($50M) to check their nuclear weapons stockpile and capability"
+            st.rerun()
+    with c_btn2:
+        if st.button(f"⚛️ Commission Bomb ($20M)", use_container_width=True):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Assemble 1 atomic bomb under $20M budget"
+            st.rerun()
+    with c_btn3:
+        if st.button(f"💵 War Bonds (+$50M)", use_container_width=True):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Issue emergency sovereign war bonds to raise $50M cash"
+            st.rerun()
+    with c_btn4:
+        if st.button(f"🤝 Trade Pact with {inspected_target}", use_container_width=True):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Propose a bilateral commercial trade pact with {inspected_target}"
+            st.rerun()
+    with c_btn5:
+        if st.button(f"📜 UNSC Sanction on {inspected_target}", use_container_width=True):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Table a formal resolution in the UN Security Council against {inspected_target}"
+            st.rerun()
+
+    chat_key = f"chat_history_{country_name}"
+    if chat_key not in st.session_state:
+        st.session_state[chat_key] = [
+            {"role": "assistant", "content": f"Commander, {persona['name']} standing by. The year is {world['year']}. You hold ${c_data['treasury']}M in Treasury reserves and {c_data['bombs']} atomic warheads. Instruct me on our nuclear expansion, intelligence operations, or diplomatic moves."}
+        ]
+
+    # Staged quick commands
+    staged_key = f"staged_cmd_{country_name}"
+    staged_val = st.session_state.get(staged_key, "")
+    if staged_val:
+        st.session_state[staged_key] = ""
+
+    # Chat Transcript Container
+    chat_container = st.container(height=380)
+    with chat_container:
+        for msg in st.session_state[chat_key]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    # Directive Authorization Card
+    proposal_key = f"pending_proposal_{country_name}"
+    if proposal_key in st.session_state and st.session_state[proposal_key]:
+        prop = st.session_state[proposal_key]
         st.markdown(
-            f"<div class='dossier-card'>"
-            f"<div class='dossier-header'>"
-            f"<div>"
-            f"<span style='font-size: 1.15rem; font-weight: 700;'>{inspected_target.upper()}</span> "
-            f"<span class='badge-c2 badge-secret'>{dossier.get('confidence_label', 'CONFIDENTIAL')}</span>"
-            f"</div>"
-            f"<div>"
-            f"<span style='font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);'>"
-            f"BILATERAL STANCE: <b>{dossier.get('stance', 'Neutral')}</b> • CONFIDENCE: <b>{dossier.get('confidence_pct', 50)}%</b>"
-            f"</span>"
-            f"</div>"
-            f"</div>"
-            f"<div class='dossier-meta-grid'>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Atomic Stockpile</div><div class='dossier-meta-value'>{dossier.get('bombs_display', 'Classified')}</div></div>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Treasury Reserves</div><div class='dossier-meta-value'>{dossier.get('treasury_display', 'Classified')}</div></div>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Uranium Supply</div><div class='dossier-meta-value'>{dossier.get('uranium_display', 'Restricted')}</div></div>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Oil Dependency</div><div class='dossier-meta-value'>{dossier.get('oil_display', 'Stable')}</div></div>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Domestic Stability</div><div class='dossier-meta-value'>{dossier.get('approval_display', '75%')}</div></div>"
-            f"<div class='dossier-meta-item'><div class='dossier-meta-title'>Delivery Tech</div><div class='dossier-meta-value'>{dossier.get('missile_tech', 'BOMBERS')}</div></div>"
-            f"</div>"
+            f"<div class='hud-panel-amber' style='margin-bottom: 12px;'>"
+            f"<b style='color: var(--accent-amber); font-size: 1.05rem;'>📋 PENDING OPERATIONAL DIRECTIVE (AWAITING YOUR AUTHORIZATION):</b><br>"
+            f"<span style='font-size: 0.9rem;'>• Action: <b>{prop.get('type')}</b> | Target: <b>{prop.get('target')}</b></span><br>"
+            f"<span style='font-size: 0.9rem;'>• Budget: <b>${prop.get('cost_m', 0)}M</b> | Effect: <b>{prop.get('description', '')}</b></span>"
             f"</div>",
             unsafe_allow_html=True
         )
-
-        # Direct Tactical Action Bar
-        st.markdown("<span style='font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);'>QUICK TACTICAL DIRECTIVES:</span>", unsafe_allow_html=True)
-        act_col1, act_col2, act_col3, act_col4 = st.columns(4)
-        with act_col1:
-            if st.button(f"🕵️ Spy on {inspected_target} ($50M)", use_container_width=True):
-                st.session_state[f"staged_cmd_{country_name}"] = f"Deploy an intelligence spy network to {inspected_target} with $50M"
+        col_auth1, col_auth2 = st.columns(2)
+        with col_auth1:
+            if st.button("🚀 AUTHORIZE & EXECUTE ORDER", type="primary", use_container_width=True):
+                success, exec_msg, rej = state_engine.execute_structured_action(country_name, prop)
+                st.session_state[proposal_key] = None
+                conf_reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
+                st.session_state[chat_key].append({"role": "assistant", "content": conf_reply})
                 st.rerun()
-        with act_col2:
-            if st.button(f"💵 Grant $40M Aid", use_container_width=True):
-                st.session_state[f"staged_cmd_{country_name}"] = f"Send $40M economic reconstruction aid to {inspected_target}"
-                st.rerun()
-        with act_col3:
-            if st.button(f"🤝 Propose Trade Treaty", use_container_width=True):
-                st.session_state[f"staged_cmd_{country_name}"] = f"Propose a bilateral commercial trade pact with {inspected_target}"
-                st.rerun()
-        with act_col4:
-            if st.button(f"📜 Table UNSC Sanction", use_container_width=True):
-                st.session_state[f"staged_cmd_{country_name}"] = f"Table a formal resolution in the UN Security Council against {inspected_target}"
+        with col_auth2:
+            if st.button("❌ CANCEL / REVISE", use_container_width=True):
+                st.session_state[proposal_key] = None
                 st.rerun()
 
-        # Strategic Map
-        st.markdown("#### 🌍 GLOBAL SITUATION MAP")
-        render_strategic_map(highlight_target=inspected_target)
+    # Chat Input
+    user_prompt = st.chat_input(f"Instruct {persona['name']} (e.g. 'How many nukes does Russia have?', 'Spy on USSR', 'Build 2 bombs', 'Authorize')...")
+    if staged_val and not user_prompt:
+        user_prompt = staged_val
 
-        # Tactical Tabs
-        tab_unsc, tab_crises, tab_hotline, tab_economy, tab_shocks = st.tabs([
-            "🇺🇳 UN SECURITY COUNCIL",
-            "🔥 CRISIS THEATERS",
-            "📞 RED PHONE HOTLINE",
-            "💵 TREASURY & REVENUE",
-            "📡 SHOCKS & DISPATCHES"
-        ])
+    if user_prompt:
+        st.session_state[chat_key].append({"role": "user", "content": user_prompt})
 
-        # TAB 1: UN SECURITY COUNCIL
-        with tab_unsc:
-            st.markdown("##### 🇺🇳 UN SECURITY COUNCIL CHAMBER")
-            resolutions = state_engine.get_unsc_resolutions(world["turn"])
-            if not resolutions:
-                st.caption("No resolutions currently pending before the council.")
-            for res in resolutions:
-                st.markdown(
-                    f"<div class='cable-card cable-card-unsc'>"
-                    f"<div class='cable-header'><span>RESOLUTION #{res['id']}</span><span>STATUS: <b>{res['status']}</b></span></div>"
-                    f"<b>{res['title']}</b><br>"
-                    f"<span style='font-size: 0.85rem;'>{res['description']}</span><br>"
-                    f"<span style='font-size: 0.8rem; color: var(--text-secondary);'>Votes Recorded: {res['votes']}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                if res["status"] == "PENDING":
-                    v_col1, v_col2, v_col3 = st.columns([1, 1, 4])
-                    with v_col1:
-                        if st.button(f"Vote YES", key=f"v_yes_{res['id']}"):
-                            state_engine.vote_unsc_resolution(res["id"], country_name, "YES")
-                            st.rerun()
-                    with v_col2:
-                        label = "VETO (NO)" if is_p5 else "Vote NO"
-                        if st.button(label, key=f"v_no_{res['id']}"):
-                            state_engine.vote_unsc_resolution(res["id"], country_name, "NO")
-                            st.rerun()
-
-        # TAB 2: DYNAMIC CRISES
-        with tab_crises:
-            st.markdown("##### 🔥 ACTIVE REGIONAL CRISES")
-            crises = state_engine.get_all_crises()
-            for cr in crises:
-                st.markdown(
-                    f"<div class='cable-card'>"
-                    f"<div class='cable-header'><span>{cr['theatre']}</span><span>STATUS: <b>{cr['status']}</b></span></div>"
-                    f"<b>{cr['title']}</b><br>"
-                    f"<span style='font-size: 0.85rem;'>{cr['description']}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                if cr["crisis_id"] == "BERLIN_BLOCKADE":
-                    b_col1, b_col2 = st.columns(2)
-                    with b_col1:
-                        if st.button("✈️ Mount Berlin Airlift ($20M)", key="btn_airlift"):
-                            state_engine.resolve_crisis_action("BERLIN_BLOCKADE", country_name, "AIRLIFT")
-                            st.rerun()
-                    with b_col2:
-                        if st.button("🛡️ Force Armed Corridor (Risk War)", key="btn_convoy"):
-                            state_engine.resolve_crisis_action("BERLIN_BLOCKADE", country_name, "ARMED_CONVOY")
-                            st.rerun()
-
-        # TAB 3: RED PHONE HOTLINE
-        with tab_hotline:
-            st.markdown("##### 📞 ENCRYPTED RED PHONE HOTLINE")
-            st.caption("Direct diplomatic telex. Counter-espionage warning: Active spy networks have a 35% chance to intercept cables!")
-            h_target = st.selectbox("RECIPIENT POWER:", [c for c in countries.keys() if c != country_name], key="hotline_tgt")
-            h_text = st.text_input("ENCRYPTED TRANSMISSION:", key="hotline_msg")
-            if st.button("DISPATCH CABLE 📨"):
-                if h_text:
-                    _, note, intercepted = state_engine.send_hotline_message(country_name, h_target, h_text)
-                    st.success(note)
-                    st.rerun()
-
-            st.markdown("###### ARCHIVED HOTLINE LOGS:")
-            hotline_logs = state_engine.get_hotline_messages(country_name)
-            for m in hotline_logs:
-                intercept_tag = "<span style='color:var(--accent-red);'>[INTERCEPTED]</span>" if m.get("is_intercepted") else "<span style='color:var(--accent-green);'>[ENCRYPTED]</span>"
-                st.markdown(
-                    f"<div class='cable-card'>"
-                    f"<div class='cable-header'><span>FROM: {m['sender']} ➔ TO: {m['recipient']}</span><span>{intercept_tag}</span></div>"
-                    f"<span style='font-size: 0.88rem; font-family: var(--font-mono);'>{m['content']}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-
-        # TAB 4: TREASURY & REVENUE
-        with tab_economy:
-            st.markdown("##### 💵 NATIONAL ECONOMY & FISCAL REVENUE")
-            st.markdown(
-                f"• **Current Treasury:** `${c_data['treasury']}M`\n"
-                f"• **Annual Base Tax Collection:** `+${75 if country_name == 'USA' else 50}M / turn`\n"
-                f"• **Domestic Tension Deduction:** `{'0%' if c_data['tension'] < 30 else ('-20%' if c_data['tension'] < 50 else '-40%')}`\n"
-                f"• **Fissile Uranium Deposits:** `{c_data.get('uranium', 0)} Metric Tons`\n"
-                f"• **Strategic Oil Reserves:** `{c_data.get('oil', 50)}%`"
-            )
-            st.markdown("---")
-            st.markdown("<b>EMERGENCY REVENUE GENERATION:</b>", unsafe_allow_html=True)
-            if st.button("⚡ FLOAT DOMESTIC WAR BONDS (+$50M CASH, +5% TENSION)"):
-                state_engine.execute_structured_action(country_name, {"type": "WAR_BONDS"})
-                st.success("Emergency sovereign bonds floated! Injected +$50M into National Treasury.")
-                st.rerun()
-
-        # TAB 5: SHOCKS & RANDOM EVENTS
-        with tab_shocks:
-            st.markdown("##### 📡 FIELD INTELLIGENCE & HISTORICAL SHOCKS")
-            events = state_engine.get_random_events()
-            for ev in events:
-                st.markdown(
-                    f"<div class='cable-card cable-card-secret'>"
-                    f"<div class='cable-header'><span>YEAR {ev['year']}</span><span>EVENT: {ev['event_type']}</span></div>"
-                    f"<b>{ev['title']}</b><br>"
-                    f"<span style='font-size: 0.85rem; color: var(--text-secondary);'>{ev['description']}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-
-    # RIGHT COLUMN: ADVISER COMMAND LOG
-    with col_adviser:
-        st.markdown(f"#### 🎙️ ADVISER COMMAND LOG")
-        st.caption(f"Direct telex channel to {persona['name']}. Instruct your adviser in plain English.")
-
-        chat_key = f"chat_history_{country_name}"
-        if chat_key not in st.session_state:
-            st.session_state[chat_key] = [
-                {"role": "assistant", "content": f"Commander, {persona['name']} on the line. The year is {world['year']}. Instruct me on our diplomatic stance, covert operations, economic aid, or atomic posture."}
-            ]
-
-        # Check for staged quick commands
-        staged_key = f"staged_cmd_{country_name}"
-        staged_val = st.session_state.get(staged_key, "")
-        if staged_val:
-            st.session_state[staged_key] = ""
-
-        chat_container = st.container(height=380)
-        with chat_container:
-            for msg in st.session_state[chat_key]:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-
-        # Check for unconfirmed pending proposal
-        proposal_key = f"pending_proposal_{country_name}"
-        if proposal_key in st.session_state and st.session_state[proposal_key]:
+        # Check if confirming existing proposal via natural language
+        u_clean = user_prompt.lower().strip()
+        if u_clean in ["go", "confirm", "do it", "approved", "authorize", "execute", "yes", "proceed"] and proposal_key in st.session_state and st.session_state[proposal_key]:
             prop = st.session_state[proposal_key]
-            st.markdown(
-                f"<div class='hud-panel-amber'>"
-                f"<b style='color: var(--accent-amber);'>📋 PROPOSED OPERATIONAL DIRECTIVE (AWAITING YOUR AUTHORIZATION):</b><br>"
-                f"<span style='font-size: 0.85rem;'>• Action: <b>{prop.get('type')}</b> | Target: <b>{prop.get('target')}</b></span><br>"
-                f"<span style='font-size: 0.85rem;'>• Budget: <b>${prop.get('cost_m', 0)}M</b> | Effect: <b>{prop.get('description', '')}</b></span>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-            col_conf1, col_conf2 = st.columns(2)
-            with col_conf1:
-                if st.button("AUTHORIZE & EXECUTE ORDER 🚀", type="primary", use_container_width=True):
-                    success, exec_msg, rej = state_engine.execute_structured_action(country_name, prop)
-                    st.session_state[proposal_key] = None
-                    conf_reply = f"**{persona['name']} to Commander:** Directive confirmed and transmitted to General Staff. {exec_msg}"
-                    st.session_state[chat_key].append({"role": "assistant", "content": conf_reply})
-                    st.rerun()
-            with col_conf2:
-                if st.button("CANCEL / REVISE ❌", use_container_width=True):
-                    st.session_state[proposal_key] = None
-                    st.rerun()
-
-        # Chat input
-        user_prompt = st.chat_input("Tell your adviser what to do (e.g. 'Build 2 bombs under 40m', 'Issue bonds', 'Go')...")
-        if staged_val and not user_prompt:
-            user_prompt = staged_val
-
-        if user_prompt:
-            st.session_state[chat_key].append({"role": "user", "content": user_prompt})
-
-            # Check if confirming existing proposal
-            u_clean = user_prompt.lower().strip()
-            if u_clean in ["go", "confirm", "do it", "approved", "authorize", "execute", "yes", "proceed"] and proposal_key in st.session_state and st.session_state[proposal_key]:
-                prop = st.session_state[proposal_key]
-                success, exec_msg, rejection = state_engine.execute_structured_action(country_name, prop)
-                st.session_state[proposal_key] = None
-                reply = f"**{persona['name']} to Commander:** Order confirmed and authorized. {exec_msg}"
-                st.session_state[chat_key].append({"role": "assistant", "content": reply})
-                st.rerun()
-
-            # Otherwise query AI adviser
-            with st.spinner("Adviser calculating operational options..."):
-                action_cmd, reply = groq_service.chat_with_adviser(
-                    country=country_name,
-                    conversation_history=st.session_state[chat_key],
-                    user_message=user_prompt,
-                    current_year=world["year"],
-                    country_state=c_data
-                )
-
-            act_status = action_cmd.get("status", "NONE")
-            act_type = action_cmd.get("type", "NONE")
-
-            if act_status == "PROPOSED" and act_type not in ["NONE", "", "ADVISORY"]:
-                st.session_state[proposal_key] = action_cmd
-            elif act_status == "CONFIRMED" and act_type not in ["NONE", "", "ADVISORY"]:
-                success, exec_msg, rejection = state_engine.execute_structured_action(country_name, action_cmd)
-                st.session_state[proposal_key] = None
-            elif act_type not in ["NONE", "", "ADVISORY"]:
-                st.session_state[proposal_key] = action_cmd
-
+            success, exec_msg, rejection = state_engine.execute_structured_action(country_name, prop)
+            st.session_state[proposal_key] = None
+            reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
             st.session_state[chat_key].append({"role": "assistant", "content": reply})
             st.rerun()
+
+        # Query AI adviser with full intelligence briefing context
+        with st.spinner("Adviser evaluating strategic options and intelligence cables..."):
+            action_cmd, reply = groq_service.chat_with_adviser(
+                country=country_name,
+                conversation_history=st.session_state[chat_key],
+                user_message=user_prompt,
+                current_year=world["year"],
+                country_state=c_data,
+                intelligence_briefings=intel_briefings_str
+            )
+
+        act_status = action_cmd.get("status", "NONE")
+        act_type = action_cmd.get("type", "NONE")
+
+        if act_status == "CONFIRMED" and act_type not in ["NONE", "", "ADVISORY"]:
+            success, exec_msg, rejection = state_engine.execute_structured_action(country_name, action_cmd)
+            st.session_state[proposal_key] = None
+            if success and exec_msg:
+                reply += f"\n\n**[OPERATIONAL EXECUTION CONFIRMED]:**\n{exec_msg}"
+        elif act_type not in ["NONE", "", "ADVISORY"]:
+            st.session_state[proposal_key] = action_cmd
+
+        st.session_state[chat_key].append({"role": "assistant", "content": reply})
+        st.rerun()

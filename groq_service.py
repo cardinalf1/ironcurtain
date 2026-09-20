@@ -150,7 +150,8 @@ class GroqService:
 
     def chat_with_adviser(self, country: str, conversation_history: List[Dict[str, str]], 
                           user_message: str, current_year: int, 
-                          country_state: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], str]:
+                          country_state: Optional[Dict[str, Any]] = None,
+                          intelligence_briefings: Optional[str] = None) -> Tuple[Dict[str, Any], str]:
         """
         Conversational Commander Interface:
         Evaluates student commands, extracts structured game actions (cost, bombs, target, action type),
@@ -168,6 +169,8 @@ class GroqService:
         tension = c_state.get("tension", 10)
         nuclear = c_state.get("nuclear", True if country == "USA" else False)
 
+        intel_section = f"\nCLASSIFIED INTELLIGENCE DOSSIER (WHAT YOUR SPIES & DIPLOMATS KNOW ABOUT OTHER POWERS):\n{intelligence_briefings}\n" if intelligence_briefings else ""
+
         system_msg = (
             f"{TABLETOP_SIMULATION_PREAMBLE}"
             f"{persona['system_prompt']}\n\n"
@@ -175,7 +178,8 @@ class GroqService:
             f"- Current Year: {current_year}\n"
             f"- National Treasury: ${treasury}M (Millions)\n"
             f"- Atomic Stockpile: {bombs} Warheads (Nuclear Research: {'COMPLETE' if nuclear else 'IN PROGRESS'})\n"
-            f"- Domestic Tension: {tension}%\n\n"
+            f"- Domestic Tension: {tension}%\n"
+            f"{intel_section}\n"
             f"AVAILABLE ACTIONS & COST / REVENUE GUIDE:\n"
             f"1. NUCLEAR_EXPANSION: Assemble atomic bombs or fund research (~$20M to $50M per bomb).\n"
             f"2. ESPIONAGE: Deploy overseas spy networks to gather intelligence ($50M min).\n"
@@ -191,8 +195,13 @@ class GroqService:
             f"12. UNSC_PROPOSE: Table a formal resolution in UN Security Council (Sanctions, Peacekeepers, Test Ban).\n"
             f"13. HOTLINE_MESSAGE: Send confidential telex to another nation leader via encrypted channel ($0).\n"
             f"14. NUCLEAR_STRIKE: Launch an atomic weapon on a target (Requires >=1 bomb. DEFCON 1 / MAD).\n\n"
+            f"INTELLIGENCE INQUIRIES & WEAPONS STOCKPILE QUESTIONS:\n"
+            f"- If the player asks about another country's nuclear weapons, stockpile, bombs, treasury, or status (e.g. 'how many nukes does Russia/USSR have?'):\n"
+            f"  1. Look up that country in the CLASSIFIED INTELLIGENCE DOSSIER above.\n"
+            f"  2. Answer DIRECTLY with the exact figures from the dossier (e.g. 'Our HUMINT spy networks confirm the USSR currently has 0 warheads...').\n"
+            f"  3. If Active Spy is NO, explain that intelligence is unconfirmed and recommend deploying an overseas spy network ($50M).\n\n"
             f"PROPOSAL & CONFIRMATION PROTOCOL:\n"
-            f"- If the player is inquiring, planning, negotiating budgets ('make as many under 20m', 'how to gain money', 'issue bonds', 'trade with...'), "
+            f"- If the player is inquiring, planning, negotiating budgets ('make as many under 20m', 'how to gain money', 'issue bonds', 'trade with...', 'spy on ussr'), "
             f"calculate exact numbers, propose the operational order, and set 'status': 'PROPOSED'.\n"
             f"- If the player gives an explicit direct command or confirms ('go', 'confirm', 'do it', 'approved', 'authorize it'), set 'status': 'CONFIRMED'.\n\n"
             f"MANDATORY JSON OUTPUT FORMAT:\n"
@@ -206,7 +215,7 @@ class GroqService:
             f'    "bombs_delta": <integer bombs added or 0>,\n'
             f'    "description": "<short description of the order>"\n'
             f"  }},\n"
-            f'  "reply_narrative": "<In-character telex message speaking directly to the player with real numbers and asking for confirmation if PROPOSED>"\n'
+            f'  "reply_narrative": "<In-character telex message speaking directly to the player with real numbers and answering intelligence questions directly>"\n'
             f"}}"
         )
 
@@ -241,8 +250,15 @@ class GroqService:
             act = dict(default_action)
             u_lower = user_message.lower()
 
-            if any(w in u_lower for w in ["go", "confirm", "do it", "approved", "authorize"]):
+            if any(w in u_lower for w in ["go", "confirm", "do it", "approved", "authorize", "execute", "yes"]):
                 act["status"] = "CONFIRMED"
+            elif any(w in u_lower for w in ["how many nukes", "how many bombs", "nuclear stockpile", "nukes they have", "nukes does", "bombs does"]):
+                tgt = "USSR" if "ussr" in u_lower or "russia" in u_lower or "soviet" in u_lower else ("USA" if "america" in u_lower or "usa" in u_lower or "us" in u_lower else "Foreign Power")
+                reply = f"**{persona['name']} to Commander:** Regarding {tgt}'s atomic capability: According to our current intelligence briefing:\n{intelligence_briefings or 'No verified HUMINT cables on file.'}\nIf we need precise verification, I advise authorizing an espionage deployment ($50M)."
+            elif any(w in u_lower for w in ["spy on", "send spies", "espionage", "infiltrate"]):
+                tgt = "USSR" if "ussr" in u_lower or "russia" in u_lower or "soviet" in u_lower else ("USA" if "america" in u_lower or "usa" in u_lower or "us" in u_lower else "USSR")
+                act = {"type": "ESPIONAGE", "status": "PROPOSED", "target": tgt, "cost_m": 50, "bombs_delta": 0, "description": f"Deploy overseas spy network into {tgt} to monitor atomic capabilities ($50M)"}
+                reply = f"**{persona['name']} to Commander:** We can deploy a covert intelligence network into {tgt} for $50M. This will penetrate their defense ministry and return decrypted reports on their exact warhead stockpile and state secrets. Click Authorize to dispatch operatives."
             elif any(w in u_lower for w in ["war bonds", "issue bonds", "gain money", "make money", "fundraise"]):
                 act = {"type": "WAR_BONDS", "status": "PROPOSED", "target": country, "cost_m": 0, "bombs_delta": 0, "description": "Issue emergency sovereign war bonds (+$50M cash, +5% tension)"}
                 reply = f"**{persona['name']} to Commander:** We can float emergency sovereign bonds on the domestic market. This will immediately inject **+$50M into our Treasury** at the expense of a +5% rise in domestic public tension. Click Authorize to execute."

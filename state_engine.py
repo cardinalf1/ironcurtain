@@ -552,6 +552,18 @@ class StateEngine:
             conn.close()
             return count > 0
 
+    def get_active_agents(self, owner_country: Optional[str] = None) -> List[Dict[str, Any]]:
+        with _db_lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            if owner_country:
+                cursor.execute("SELECT * FROM active_agents WHERE owner_country = ? AND status = 'ACTIVE'", (owner_country,))
+            else:
+                cursor.execute("SELECT * FROM active_agents WHERE status = 'ACTIVE'")
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+
     # =========================================================================
     # CLASSIFIED INTELLIGENCE DOSSIER (FOG-OF-WAR ENGINE)
     # =========================================================================
@@ -1189,7 +1201,33 @@ class StateEngine:
                 conn.commit()
                 conn.close()
 
-            return True, f"INTELLIGENCE ASSET DEPLOYED: Covert operative dispatched to {target}. Allocated ${cost_m}M.", None
+            # Generate immediate field intelligence cable
+            dossier = self.get_country_dossier(country_name, target)
+            bombs_info = dossier.get("bombs_display", "Unknown")
+            nuke_status = dossier.get("nuclear_status", "Unconfirmed")
+            treasury_info = dossier.get("treasury_display", "Unconfirmed")
+            conf_info = dossier.get("confidence_label", "HIGH // HUMINT FIELD ASSET")
+
+            self.add_intel_cable(
+                turn=turn,
+                recipient=country_name,
+                target=target,
+                summary=f"Infiltration debrief on {target}",
+                apparent_data=f"Stockpile: {bombs_info} | Capability: {nuke_status}",
+                confidence=conf_info,
+                status="ACTIVE"
+            )
+
+            msg = (
+                f"🕵️ INTELLIGENCE ASSET INFILTRATED {target.upper()} (${cost_m}M allocated).\n\n"
+                f"**DECRYPTED FIELD INTELLIGENCE CABLE:**\n"
+                f"• **Atomic Warhead Stockpile:** {bombs_info}\n"
+                f"• **Nuclear Capability:** {nuke_status}\n"
+                f"• **Treasury Reserves:** {treasury_info}\n"
+                f"• **Confidence Rating:** {conf_info}\n\n"
+                f"*Field Station Chief Note: HUMINT assets are active. Continuous telemetry routed to your C2 Notification Centre.*"
+            )
+            return True, msg, None
 
         # 4. ECONOMIC REVENUE: WAR BONDS (Gain cash)
         elif act_type in ["WAR_BONDS", "BONDS", "AUSTERITY"]:
