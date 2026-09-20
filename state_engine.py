@@ -1294,6 +1294,16 @@ class StateEngine:
 
             return True, f"MILITARY POSTURE TRANSMITTED: Forward divisions reinforced along {target} frontier with ${cost_m}M.", None
 
+    def submit_directive(self, country_name: str, action_type: str, cost_m: int, target: str, description: str) -> Tuple[bool, str]:
+        action = {
+            "type": action_type,
+            "cost_m": cost_m,
+            "target": target,
+            "description": description
+        }
+        ok, msg, rej = self.execute_structured_action(country_name, action)
+        return ok, msg or rej or ""
+
     def get_pending_directives(self, turn: int) -> List[Dict[str, Any]]:
         with _db_lock:
             conn = self._get_connection()
@@ -1342,6 +1352,10 @@ class StateEngine:
             """, (turn, channel, sender, recipient, content))
             conn.commit()
             conn.close()
+
+    def send_comms(self, channel: str, sender: str, recipient: Optional[str], content: str):
+        world = self.get_world_state()
+        self.add_comm(world["turn"], channel, sender, recipient, content)
 
     def get_comms(self, country_name: Optional[str] = None) -> List[Dict[str, Any]]:
         with _db_lock:

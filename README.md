@@ -1,261 +1,56 @@
-## License & Copyright
-
-Copyright (C) 2026 Open Historia
-
-This project is licensed under the terms of the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See the [LICENSE](LICENSE) file for details.
-
-Contributions are accepted under the [Contributor Copyright Assignment Agreement](CLA.md), which assigns the copyright in contributions to the Open Historia Organisation. CLA Assistant asks you to sign it on your first pull request; see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-<!-- Open Historia — portions (install, Android app, hub & preset docs) © 2026 Nicholas Krol, AGPL-3.0-or-later (see LICENSE). -->
-<h1 align="center">Open Historia</h1>
+# The Iron Curtain // Cold War Geopolitics Simulator (1945–1953)
 
 <div align="center">
-  <strong>An open-source, better alternative to <a href="https://www.paxhistoria.co/games">Pax Historia</a>.</strong>
+  <h3>Palantir Gotham / Foundry C2 Defense-Intelligence Geopolitical Simulation</h3>
+  <p>Multiplayer Classroom Crisis Platform powered by Groq LLM Historical Advisers</p>
 </div>
-
-<br />
-
-<div align="center">
-  <!-- Discord -->
-  <a href="https://discord.gg/QaqAK7fQAg">
-    <img src="https://img.shields.io/badge/discord-join-5865F2.svg?style=flat-square&logo=discord&logoColor=white"
-      alt="Discord" />
-  </a>
-  <!-- Reddit -->
-  <a href="https://www.reddit.com/r/OpenHistoria">
-    <img src="https://img.shields.io/badge/reddit-r%2FOpenHistoria-FF4500.svg?style=flat-square&logo=reddit&logoColor=white"
-      alt="Reddit" />
-  </a>
-  <!-- License -->
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square"
-      alt="License: AGPL-3.0" />
-  </a>
-  <!-- Status -->
-  <a href="#">
-    <img src="https://img.shields.io/badge/status-early%20development-orange.svg?style=flat-square"
-      alt="Early Development" />
-  </a>
-</div>
-
-<div align="center">
-  <sub>Built with ❤︎ by <a href="https://github.com/Open-Historia/open-historia/graphs/contributors">contributors</a>.
-</div>
-
-<br />
-<br />
-
-![](https://github.com/Open-Historia/open-historia/blob/main/public/screenshots/screenshot.webp?raw=true)
----
-
-## ✨ Features
-
-- __interactive world map:__ watch territory, borders, and nations shift as history unfolds
-- __ai-generated events:__ dynamic events shaped by your decisions and the state of the world
-- __diplomacy:__ negotiate with AI-controlled nations through natural language chat — click any country to talk to it or get an AI intelligence briefing
-- __ai advisor:__ consult your advisor for strategic guidance, economic analysis, and situation summaries
-- __map editor:__ a full vector map editor (draw, split, merge, paint owners, cities) built into the scenario editor — build a world and hit *Apply & Play*
-- __troops:__ deploy, move and battle armies; deployments stay pending until the AI resolves them; scenarios control which troop types exist in their era
-- __scenario hub:__ browse, vote on and import community scenarios from the in-game **Community** tab, and publish your own
-- __self-hostable:__ run your own instance with your own AI backend completely offline
-- __The Iron Curtain (Classroom C2 Platform):__ Multiplayer Cold War (1945–1953) simulation engine with Palantir Gotham C2 defense console, DEFCON 1–5 MAD escalation, Groq LLM historical advisers (Marshall, Molotov, Eden), UN Security Council P5 veto mechanics, encrypted Red Phone hotlines with wiretaps, dynamic regional crises (Berlin Blockade, Korean War), classified fog-of-war country dossiers, and war bond macro-economy.
 
 ---
 
-## 🎖️ The Iron Curtain: Cold War Classroom Edition
+## 🎖️ Operational Capabilities
 
-This fork integrates **The Iron Curtain** multiplayer simulation platform directly atop Open-Historia's vector canvas map.
-
-### Quick Start
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Build client bundle
-npm run build
-
-# 3. Launch C2 Server (or double-click run_game.bat on Windows)
-node server/server.js
-# Access via http://localhost:3000
-```
-- **Teacher Projector Console**: Select `🏛️ TEACHER PROJECTOR VIEW` to project world state, monitor student cables, view DEFCON/Doomsday clock, and execute turn resolutions with host PIN (`POTSDAM1945`).
-- **Student Nation Terminals**: Select any country (`USA`, `USSR`, `United Kingdom`, `France`, `China`, etc.) to review classified dossiers, negotiate orders with historical advisers, authorize directives, vote in the UN Security Council, and send encrypted Red Phone telexes.
-
-## 🚀 Play
-
-### In your browser
-
-**[openhistoria.com](https://openhistoria.com)** — nothing to install. Games are saved in
-your browser, and you bring your own AI key (it goes straight to your provider, never to
-us). The world map is served by the community [content-node network](https://github.com/Open-Historia/open-historia-node).
-
-Local AI (Ollama, LM Studio) needs one extra step in the browser: the server has to allow
-the site's origin, e.g. start Ollama with `OLLAMA_ORIGINS=https://openhistoria.com`. The
-desktop app below needs no such setup.
-
-### Desktop (offline, single-player)
-
-Download **[`Open-Historia.zip`](https://github.com/Open-Historia/open-historia/releases/tag/app-stable)**
-(~186 MB — code *and* all map data), unzip it anywhere, then:
-
-- **Windows:** run **`Open-Historia-Setup.exe`**, then open Open Historia from the Start Menu
-- **macOS:** unzip and drag **Open Historia** to Applications (first run: right-click -> *Open*)
-- **Linux:** `chmod +x Open-Historia-x86_64.AppImage` and run it
-
-The launcher checks Node.js, downloads the map data, installs dependencies, builds,
-and opens the game. To update an existing install later, run the matching
-newest installer from the downloads page and run it over the top - your saves
-while preserving your saves, scenarios, and map data.
-
-> [!TIP]
-> Run the launcher **normally** — it does not need (and works better without)
-> administrator rights: an elevated window gets the admin account's environment,
-> which can hide a Node.js that was installed for your own account.
-
-
-#### Android app (thin APK)
-
-Easiest: download **`open-historia.apk`** from the
-[**Android release**](https://github.com/Open-Historia/open-historia/releases/tag/android)
-and open it to install (allow installs from your browser when Android asks).
-It's a thin client: the game itself runs on whatever server it connects to, so you need
-one of the two:
-
-- **A desktop on the same network** running the launcher — turn on
-  **Settings → Network → "Let other devices connect"** there, then type the
-  address it shows you (e.g. `http://192.168.1.20:3000`) into the app once;
-  it's remembered. See
-  [Reaching the server from another device](#reaching-the-server-from-another-device).
-- **[Termux](https://termux.dev/) on the phone itself** running the server — the app
-  finds it on first launch by itself, no address needed.
-
-<details>
-<summary>Build the APK yourself (needs the Android SDK)</summary>
-
-```bash
-cd mobile
-npm install
-npx cap sync android
-cd android && ./gradlew assembleDebug   # gradlew.bat on Windows
-```
-
-The APK lands in `mobile/android/app/build/outputs/apk/debug/`. (Or open
-`mobile/android` in Android Studio and press Run.) Maintainers: the
-**Build Android APK** action in the Actions tab builds and republishes the
-release APK — run it after changing `mobile/`.
-
-</details>
-
-### Manual
-
-Prerequisites: [Git](https://git-scm.com/) and [Node.js](https://nodejs.org/en) 22 LTS or newer (minimum 20.19 / 22.12 — the client build runs on Vite 7, which requires it). Building the **desktop app** needs 22.12+, which is what Electron 44 requires; the server and the web client still run on 20.19.
-
-```bash
-git clone https://github.com/Open-Historia/open-historia.git
-cd open-historia
-node scripts/fetch-map-assets.mjs  # Download the world map data (see note below)
-npm install                        # Install dependencies (includes OpenLayers etc. for the editor)
-npm run build                      # Build the client
-node server/server.js              # Start the server
-```
-
-Then open **http://localhost:3000** in your browser.
-
-### Reaching the server from another device
-
-Out of the box the server answers **only the machine it runs on** — which covers
-the desktop app, Termux on the same phone, and a browser on the same computer.
-
-To play from your phone or another computer, turn on
-**Settings → Network → "Let other devices connect"**. It takes effect
-immediately (no restart), it is remembered for next time, and it shows you the
-exact address to type into the Android app, so you never have to go and find
-your own IP:
-
-> Type this into the Android app:
-> `http://192.168.1.20:3000`
-
-Worth knowing before you do: **the game's API has no password.** While sharing is
-on, anyone who can reach that address can read, change and delete your games and
-scenarios — the server can't tell them apart from you. That's fine on a home
-network you control and a bad idea on café, hotel, dorm or office Wi-Fi. The
-switch is off by default for that reason, not because sharing is discouraged.
-
-Running headless — Termux, a NAS, a box with no screen to click a toggle on? Set
-`OH_HOST`. It overrides the setting and makes the in-game switch read-only, so a
-script and a player can't disagree about who can reach the server:
-
-```bash
-OH_HOST=0.0.0.0 node server/server.js      # every interface
-OH_HOST=192.168.1.20 node server/server.js # one interface only
-```
-
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `OH_HOST` | unset | Which interface to listen on. Overrides the Settings toggle and locks it. Anything but loopback puts the API on your network. |
-| `OH_ALLOW_REMOTE_RELAY` | off | Lets other devices use this server's AI relay. Off means the relay only answers this machine, so it can't be used as a proxy by anyone else on the network. |
-| `OH_RATE_LIMIT` | `1200` | Requests per minute per network client (loopback is exempt). |
-
-> [!TIP]
-> **Running the server only — Termux/Android, a headless box, a NAS?** Skip the
-> desktop-app tooling:
->
-> ```bash
-> npm install --omit=dev --omit=optional
-> ```
->
-> That drops Electron and its build chain (783 packages → 286) while keeping
-> everything the client build and the server actually need. On Android it is the
-> difference between working and not: Electron publishes no Android build, so its
-> install script exits with *"Electron builds are not available on platform:
-> android"*. A plain `npm install` still succeeds there — Electron is an
-> `optionalDependency`, so npm reports the failure and carries on — but there is no
-> reason to download it in the first place.
-
-> **Note:** the large map binaries (`*.pmtiles`, `public/assets/*-seed.*`, and the stock
-> world `server/data/stock/regions.geojson`) are **not** in the repo — they are
-> hosted as [GitHub Release assets](https://github.com/Open-Historia/open-historia/releases/tag/map-data)
-> and downloaded by `scripts/fetch-map-assets.mjs`. The launcher script for your platform
-> runs this for you automatically, so a plain ZIP download works too — no Git LFS needed.
+- **Direct Start**: Launches straight into the 1945 Cold War post-Potsdam theater. Zero scenario pickers or unnecessary setup screens.
+- **Palantir C2 Defense Interface**: Dark slate/charcoal defense aesthetic (`#0a0d12`), hairline grid borders, high-density telemetry, and verified intelligence classifications (`[TOP SECRET // NOFORN]`).
+- **Country Intelligence Dossiers with Fog-of-War**: Click any nation or contested buffer state to inspect estimated warhead stockpiles, strategic reserves, uranium deposits, and domestic stability filtered by your nation's intelligence confidence (Audited, HUMINT ±1, or Signals bounds).
+- **1-Click Tactical Directives**: Instantly stage espionage rings, grant reconstruction aid, propose commercial treaties, or table UN sanctions.
+- **AI Historical Advisers (Groq `llama-3.1-8b-instant`)**: Negotiate orders in natural language with in-character national advisers (Marshall, Molotov, Eden, Bidault, Zhou Enlai). Advisers understand budget caps (*"build as many bombs under $20M"*), draft formal authorization cards, and execute directives upon your confirmation.
+- **UN Security Council (UNSC) with P5 Vetoes**: Permanent Five members (USA, USSR, UK, France, China) wield instant veto power over peacekeeper deployments, sanctions, and arms limitations.
+- **Dynamic Flashpoint Theaters**: Real-time crisis arbitration for the Berlin Airlift (1948) and the Korean War (1950).
+- **Encrypted Red Phone Hotline**: Confidential bilateral diplomatic channels with dynamic counter-espionage wiretaps (35% interception risk that can leak cables directly to the UN Public Wire).
+- **Macro-Economy & War Bonds**: Annual base industrial tax collection, bilateral commercial treaties, and sovereign war bond issuances for emergency cash injections.
+- **Emergent Historical Shocks**: Random historical events including the 1946–47 Soviet famine, UK coal rationing, and laboratory nuclear criticality accidents.
 
 ---
 
-## 🌍 Scenarios
+## 🚀 Quick Start
 
-**Modern Day** is the only built-in scenario. All other official presets — *World War II — 1939*,
-*Medieval — 1200 AD*, *Rome — 117 AD*, *Mongol World — 1300 AD*, *New World — 1650*, and
-*Bronze Age — 1200 BC* — live on the
-[**Scenario Hub**](https://github.com/Open-Historia/Open-historia-scenarios), pinned at the top of
-the in-game **Community** tab. Import any of them with one click, or publish your own.
-
-To rebuild an official preset from source (specs live in `scripts/presets/`):
-
-```bash
-node scripts/presets/build-preset.mjs scripts/presets/wwii-1939.spec.mjs
+### 1. Launch via Launcher (Windows)
+Double-click **`run_game.bat`**. It starts the server and immediately opens your default browser at:
+```
+http://localhost:8501
 ```
 
-The built-in Modern Day map is authored in the Scenario Workshop and lives in the repo as
-`server/seed/default/regions.geojson` (with its cities, world and colours beside it); the server
-copies that seed into its data directory on first run and whenever the seed's `builtInMap` changes.
-`node scripts/build-default-map.mjs` regenerates the *stock* GADM world instead — the map every
-scenario without one of its own (the hub presets) renders on.
+### 2. Manual Startup
+```bash
+# Activate virtual environment
+.venv\Scripts\activate
 
-## 🗺️ Map editor
+# Launch Streamlit server
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+```
 
-Open any scenario's editor and click **🗺️ Open Map Editor** (or visit
-`http://localhost:3000/?editor=1` for the standalone editor). Draw regions, split and
-merge borders freehand, paint owners, import 70k cities, sign your map, then
-**Apply & Play**.
+### 3. Student LAN Connectivity
+Other students or teams in the classroom can connect from their own laptops, tablets, or phones using:
+```
+http://<host-ip-address>:8501
+```
 
-## 🖥️ Host a server node
+---
 
-Want to help the network? Run a **content node** on your own device to cache and serve
-the game's map data to nearby players so everyone loads faster. It's a one-click install
-and deliberately safe — a node only ever serves **read-only, checksum-verified** map
-files, and never touches anyone's games, accounts, AI keys, or code.
+## 🧪 Automated Testing
 
-➡️ **[Set up a node → Open-Historia/open-historia-node](https://github.com/Open-Historia/open-historia-node)**
-
-Your node registers itself and starts serving players once an admin accepts it. See the
-[node README](https://github.com/Open-Historia/open-historia-node#readme) for the full
-walkthrough (including a free Cloudflare Tunnel to put it online).
+Run the comprehensive test suite verifying the intelligence dossier, UNSC veto arbitration, hotline wiretaps, war bonds, tax collection, and random events:
+```bash
+.venv\Scripts\python.exe test_systems.py
+.venv\Scripts\python.exe test_simulation_e2e.py
+```
