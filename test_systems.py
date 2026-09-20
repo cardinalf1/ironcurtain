@@ -97,6 +97,30 @@ def run_tests():
     assert se.is_turn_submitted("USSR", curr_turn) is True
     print("   Nation Turn Submission verified.")
 
+    print("\n9. Testing Diplomatic Stance Alignment (Ally vs Neutral)...")
+    ok_st, msg_st, _ = se.execute_structured_action("India", {"type": "DIPLOMATIC_STANCE", "target": "USSR", "stance": "Ally"})
+    assert "Ally" in msg_st
+    stances = {s["to_country"]: s["stance"] for s in se.get_stances("India")}
+    assert stances.get("USSR") == "Ally"
+    print("   Diplomatic Stance verified: Stance correctly set to 'Ally'.")
+
+    print("\n10. Testing Non-Nuclear Power Bomb Request Guard...")
+    india_pre = se.get_country("India")
+    assert india_pre["nuclear"] == 0 and india_pre["bombs"] == 0
+    ok_nuke, msg_nuke, _ = se.execute_structured_action("India", {"type": "NUCLEAR_EXPANSION", "cost_m": 100, "bombs_delta": 5})
+    assert ok_nuke is True
+    india_post = se.get_country("India")
+    assert india_post["bombs"] == 0, f"Expected 0 bombs, got {india_post['bombs']}"
+    assert india_post["nuclear"] == 1
+    assert "RESEARCH" in msg_nuke
+    print("   Non-nuclear guard verified: 0 bombs granted, redirected to Nuclear Research.")
+
+    print("\n11. Testing Nuclear Strike with 0 Bombs...")
+    ok_strike, _, rej_strike = se.execute_structured_action("India", {"type": "NUCLEAR_STRIKE", "target": "USA"})
+    assert ok_strike is False
+    assert "Stockpile depleted" in (rej_strike or "")
+    print("   Nuclear strike guard verified: Correctly rejected due to 0 warheads.")
+
     print("\nALL VERIFICATION CHECKS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":

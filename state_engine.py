@@ -1119,17 +1119,43 @@ class StateEngine:
             rej = f"Directive capacity reached: {country_name} has already issued {turn_orders}/{MAX_DIRECTIVES_PER_TURN} directives for Year {world['year']}. Directives are locked until year adjudication."
             return False, rej, rej
 
-        # 1. NUCLEAR EXPANSION (Build bombs / Uranium check / Potential test failure)
+        # 1. NUCLEAR EXPANSION / NUCLEAR RESEARCH
         if act_type in ["NUCLEAR_EXPANSION", "NUCLEAR_RESEARCH", "BUILD_BOMBS", "BUILD_BOMB"]:
-            if cost_m < 60:
-                cost_m = 80
-            if cost_m > country["treasury"]:
-                rej = f"Insufficient funds: Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
+            # Check if nation possesses nuclear capability
+            if not country["nuclear"] or act_type == "NUCLEAR_RESEARCH":
+                # Non-nuclear nation must fund research reactor first; produces 0 warheads
+                cost_m = max(100, cost_m)
+                if cost_m > country["treasury"]:
+                    rej = f"Insufficient funds: Nuclear R&D program requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
+                    return False, rej, rej
+                
+                with _db_lock:
+                    conn = self._get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE countries SET treasury = treasury - ?, nuclear = 1 WHERE name = ?", (cost_m, country_name))
+                    cursor.execute("""
+                        INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                        VALUES (?, ?, 'NUCLEAR_RESEARCH', ?, ?, 'Commissioned heavy-water research reactor & atomic physics program', ?)
+                    """, (turn, country_name, country_name, cost_m, dice_roll))
+                    cursor.execute("""
+                        INSERT INTO map_events (turn, event_type, source_name, target_name, description)
+                        VALUES (?, 'incident', ?, ?, 'ATOMIC RESEARCH: Secret reactor construction initiated.')
+                    """, (turn, country_name, country_name))
+                    conn.commit()
+                    conn.close()
+
+                return True, f"🔬 ATOMIC RESEARCH PROGRAM COMMISSIONED: Allocated ${cost_m}M to construct research reactors and physics laboratories. Nuclear technology unlocked for future warhead development (0 warheads currently assembled).", None
+
+            # Country is already nuclear capable (e.g. USA, or unlocked via research)
+            # Strictly max 1 bomb per cycle for realism ($80M)
+            cost_m = 80
+            if country["treasury"] < cost_m:
+                rej = f"Insufficient funds: Assembling 1 atomic warhead requires ${cost_m}M, but treasury holds only ${country['treasury']}M."
                 return False, rej, rej
 
             # 12% chance of Criticality Incident / Failed Test
             test_fail_roll = secrets.randbelow(100)
-            if test_fail_roll < 12 and bombs_delta > 0:
+            if test_fail_roll < 12:
                 with _db_lock:
                     conn = self._get_connection()
                     cursor = conn.cursor()
@@ -1157,21 +1183,21 @@ class StateEngine:
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE countries 
-                    SET treasury = treasury - ?, bombs = bombs + ?, nuclear = 1 
+                    SET treasury = treasury - ?, bombs = bombs + 1, nuclear = 1 
                     WHERE name = ?
-                """, (cost_m, bombs_delta, country_name))
+                """, (cost_m, country_name))
                 cursor.execute("""
                     INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
                     VALUES (?, ?, 'NUCLEAR_EXPANSION', ?, ?, ?, ?)
-                """, (turn, country_name, country_name, cost_m, f"Expanded atomic production: +{bombs_delta} bomb(s). {desc}", dice_roll))
+                """, (turn, country_name, country_name, cost_m, f"Assembled 1 atomic warhead ($80M). {desc}", dice_roll))
                 cursor.execute("""
                     INSERT INTO map_events (turn, event_type, source_name, target_name, description)
                     VALUES (?, 'nuclear_test', ?, ?, ?)
-                """, (turn, country_name, country_name, f"ATOMIC EXPANSION: {country_name} completes assembly of +{bombs_delta} atomic weapon(s)."))
+                """, (turn, country_name, country_name, f"ATOMIC EXPANSION: {country_name} completes assembly of +1 atomic weapon."))
                 conn.commit()
                 conn.close()
 
-            return True, f"⚛️ ATOMIC EXPANSION COMPLETE: Added +{bombs_delta} bomb(s). -${cost_m}M allocated from defense reserves (Remaining: ${country['treasury'] - cost_m}M).", None
+            return True, f"⚛️ ATOMIC EXPANSION COMPLETE: Added +1 bomb. -${cost_m}M allocated from defense reserves (Remaining: ${country['treasury'] - cost_m}M).", None
 
         # 2. NUCLEAR STRIKE
         elif act_type == "NUCLEAR_STRIKE":
@@ -1401,10 +1427,44 @@ class StateEngine:
 
             return True, f"ECONOMIC AID TRANSFERRED: -${cost_m}M transferred to {target} (Remaining Treasury: ${country['treasury'] - cost_m}M).", None
 
-        # 9. DIPLOMATIC STANCE
-        elif act_type in ["DIPLOMATIC_STANCE", "STANCE"]:
-            stance = action.get("stance", "Neutral")
+        # 9. DIPLOMATIC STANCE / ALLIANCE
+        elif act_type in ["DIPLOMATIC_STANCE", "STANCE", "ALIGN", "ALLIANCE"]:
+            stance = action.get("stance")
+            target = action.get("target", "USSR" if country_name != "USSR" else "USA")
+
+            # Robust stance parsing: inspect description, type, and raw text
+            desc_text = (str(action.get("description", "")) + " " + str(action.get("type", "")) + " " + str(action.get("stance", ""))).lower()
+            if not stance or stance.lower() == "neutral":
+                if any(k in desc_text for k in ["ally", "alliance", "allied", "align"]):
+                    stance = "Ally"
+                elif any(k in desc_text for k in ["friendly", "friend"]):
+                    stance = "Friendly"
+                elif any(k in desc_text for k in ["rival"]):
+                    stance = "Rival"
+                elif any(k in desc_text for k in ["enemy", "hostile"]):
+                    stance = "Enemy"
+                else:
+                    stance = stance or "Neutral"
+
+            stance = stance.capitalize()
+            if stance not in ["Ally", "Friendly", "Neutral", "Rival", "Enemy"]:
+                stance = "Ally" if "ally" in stance.lower() else "Neutral"
+
             self.set_stance(country_name, target, stance)
+            with _db_lock:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'DIPLOMATIC_STANCE', ?, 0, ?, ?)
+                """, (turn, country_name, target, f"Diplomatic stance toward {target} declared as '{stance}'", dice_roll))
+                cursor.execute("""
+                    INSERT INTO map_events (turn, event_type, source_name, target_name, description)
+                    VALUES (?, 'diplomatic', ?, ?, ?)
+                """, (turn, country_name, target, f"DIPLOMATIC ALIGNMENT: {country_name} declared stance toward {target} as '{stance}'."))
+                conn.commit()
+                conn.close()
+
             return True, f"DIPLOMATIC POSTURE: Stance toward {target} set to '{stance}'.", None
 
         # 10. MILITARY POSTURE / REINFORCEMENT
