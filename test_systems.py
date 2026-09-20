@@ -1,0 +1,65 @@
+"""
+Verification script for all newly added systems in state_engine.py
+"""
+import os
+import sys
+
+# Ensure local imports work
+sys.path.insert(0, os.path.dirname(__file__))
+
+from state_engine import StateEngine
+
+def run_tests():
+    se = StateEngine()
+    print("1. Testing Country Dossier (Fog-of-War)...")
+    dossier_enemy = se.get_country_dossier("USA", "USSR")
+    print(f"   USA looking at USSR -> Confidence: {dossier_enemy['confidence_label']} ({dossier_enemy['confidence_pct']}%)")
+    print(f"   Estimated bombs: {dossier_enemy['bombs_display']}")
+
+    dossier_ally = se.get_country_dossier("USA", "United Kingdom")
+    print(f"   USA looking at UK -> Confidence: {dossier_ally['confidence_label']} ({dossier_ally['confidence_pct']}%)")
+
+    print("\n2. Testing UN Security Council (UNSC) with Veto...")
+    ok, msg = se.propose_unsc_resolution("USA", "Embargo on Contested Frontiers", "Prohibit trade with belligerent buffer zones", "Korea", "SANCTIONS")
+    print(f"   Propose resolution: {msg}")
+    res_list = se.get_unsc_resolutions()
+    res_id = res_list[0]["id"]
+    se.vote_unsc_resolution(res_id, "USA", "YES")
+    se.vote_unsc_resolution(res_id, "United Kingdom", "YES")
+    se.vote_unsc_resolution(res_id, "USSR", "NO") # P5 VETO
+    se.resolve_unsc_resolutions(res_list[0]["turn"])
+    updated_res = se.get_unsc_resolutions()[0]
+    print(f"   Resolution Status after USSR vote: {updated_res['status']} (Vetoed by: {updated_res.get('vetoed_by')})")
+    assert updated_res["status"] == "VETOED"
+
+    print("\n3. Testing Red Phone Encrypted Hotline...")
+    ok, note, intercepted = se.send_hotline_message("USA", "USSR", "President Truman: We propose formal bilateral consultation in Geneva.")
+    print(f"   Hotline message sent: {note}")
+    logs = se.get_hotline_messages("USA")
+    print(f"   Hotline log count for USA: {len(logs)}")
+    assert len(logs) > 0
+
+    print("\n4. Testing Economic Engine & War Bonds...")
+    usa_before = se.get_country("USA")["treasury"]
+    se.execute_structured_action("USA", {"type": "WAR_BONDS"})
+    usa_after = se.get_country("USA")["treasury"]
+    print(f"   USA Treasury before war bonds: ${usa_before}M -> after: ${usa_after}M")
+    assert usa_after == usa_before + 50
+
+    print("\n5. Testing Annual Turn Economy Collection...")
+    se.execute_turn_economy(1)
+    usa_after_tax = se.get_country("USA")["treasury"]
+    print(f"   USA Treasury after annual tax collection: ${usa_after_tax}M (+$75M base tax)")
+    assert usa_after_tax > usa_after
+
+    print("\n6. Testing Random Events Engine...")
+    se.roll_turn_random_events(1946, 2)
+    events = se.get_random_events()
+    print(f"   Random Events logged count: {len(events)}")
+    for ev in events[:2]:
+        print(f"   - [{ev['event_type']}] {ev['title']}: {ev['description'][:60]}...")
+
+    print("\nALL VERIFICATION CHECKS PASSED SUCCESSFULLY!")
+
+if __name__ == "__main__":
+    run_tests()
