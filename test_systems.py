@@ -10,7 +10,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 from state_engine import StateEngine
 
 def run_tests():
-    se = StateEngine()
+    test_db = "test_scratch.db"
+    if os.path.exists(test_db):
+        try:
+            os.remove(test_db)
+        except Exception:
+            pass
+    se = StateEngine(db_path=test_db)
     print("1. Testing Country Dossier (Fog-of-War)...")
     dossier_enemy = se.get_country_dossier("USA", "USSR")
     print(f"   USA looking at USSR -> Confidence: {dossier_enemy['confidence_label']} ({dossier_enemy['confidence_pct']}%)")
@@ -44,12 +50,12 @@ def run_tests():
     se.execute_structured_action("USA", {"type": "WAR_BONDS"})
     usa_after = se.get_country("USA")["treasury"]
     print(f"   USA Treasury before war bonds: ${usa_before}M -> after: ${usa_after}M")
-    assert usa_after == usa_before + 50
+    assert usa_after == usa_before + 150
 
     print("\n5. Testing Annual Turn Economy Collection...")
     se.execute_turn_economy(1)
     usa_after_tax = se.get_country("USA")["treasury"]
-    print(f"   USA Treasury after annual tax collection: ${usa_after_tax}M (+$75M base tax)")
+    print(f"   USA Treasury after annual tax collection: ${usa_after_tax}M (+$250M base tax)")
     assert usa_after_tax > usa_after
 
     print("\n6. Testing Random Events Engine...")
@@ -58,6 +64,38 @@ def run_tests():
     print(f"   Random Events logged count: {len(events)}")
     for ev in events[:2]:
         print(f"   - [{ev['event_type']}] {ev['title']}: {ev['description'][:60]}...")
+
+    print("\n7. Testing Directive Limits & Military Offensive against Germany...")
+    curr_turn = se.get_world_state()["turn"]
+    ussr_before = se.get_country("USSR")["treasury"]
+    # 1st order: Attack Germany
+    ok1, msg1, rej1 = se.execute_structured_action("USSR", {"type": "MILITARY_OFFENSIVE", "target": "Germany", "cost_m": 120})
+    assert ok1 is True
+    ussr_after1 = se.get_country("USSR")["treasury"]
+    assert ussr_after1 == ussr_before - 120
+    print(f"   USSR attacked Germany: Cost ${ussr_before - ussr_after1}M deducted cleanly.")
+
+    # 2nd order: Espionage
+    ok2, msg2, rej2 = se.execute_structured_action("USSR", {"type": "ESPIONAGE", "target": "USA", "cost_m": 40})
+    assert ok2 is True
+
+    # 3rd order: Nuclear expansion
+    ok3, msg3, rej3 = se.execute_structured_action("USSR", {"type": "NUCLEAR_EXPANSION", "cost_m": 80})
+    assert ok3 is True
+    assert se.get_directive_count("USSR", curr_turn) == 3
+
+    # 4th order: Should be blocked by MAX_DIRECTIVES_PER_TURN (3)
+    ok4, msg4, rej4 = se.execute_structured_action("USSR", {"type": "MILITARY_OFFENSIVE", "target": "Poland", "cost_m": 120})
+    assert ok4 is False
+    assert "capacity reached" in (rej4 or "").lower() or "capacity exceeded" in (rej4 or "").lower()
+    print("   Directive limit verified: 4th order correctly blocked.")
+
+    print("\n8. Testing Nation Turn Submission...")
+    sub_before = se.get_submission_status(curr_turn)
+    assert sub_before["USSR"] is True  # True because USSR has pending directives
+    se.submit_turn("USSR", curr_turn)
+    assert se.is_turn_submitted("USSR", curr_turn) is True
+    print("   Nation Turn Submission verified.")
 
     print("\nALL VERIFICATION CHECKS PASSED SUCCESSFULLY!")
 

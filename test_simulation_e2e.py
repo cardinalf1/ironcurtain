@@ -23,8 +23,8 @@ def run_e2e_test():
     assert world["year"] == 1945, f"Expected 1945, got {world['year']}"
     assert world["defcon"] == 4, f"Expected DEFCON 4, got {world['defcon']}"
     assert len(countries) == 8, f"Expected 8 countries, got {len(countries)}"
-    assert len(buffers) == 6, f"Expected 6 buffers, got {len(buffers)}"
-    print("✓ Initial state verified: Year 1945, DEFCON 4, 8 playable nations, 6 buffer states.")
+    assert len(buffers) == 9, f"Expected 9 buffers, got {len(buffers)}"
+    print("✓ Initial state verified: Year 1945, DEFCON 4, 8 playable nations, 9 buffer states.")
 
     # 2. Hard validation rules test
     # A) USA submits espionage to Moscow ($50M) -> Valid

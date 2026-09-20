@@ -181,34 +181,35 @@ class GroqService:
             f"- Domestic Tension: {tension}%\n"
             f"{intel_section}\n"
             f"AVAILABLE ACTIONS & COST / REVENUE GUIDE:\n"
-            f"1. NUCLEAR_EXPANSION: Assemble atomic bombs or fund research (~$20M to $50M per bomb).\n"
-            f"2. ESPIONAGE: Deploy overseas spy networks to gather intelligence ($50M min).\n"
-            f"3. ECONOMIC_AID: Transfer financial reconstruction grants ($10M-$100M).\n"
-            f"4. MILITARY_POSTURE: Forward-deploy divisions to protect a border/buffer state ($20M-$50M).\n"
-            f"5. COVERT_COUP: Fund pro-bloc insurgencies or coups in contested buffer states ($40M-$80M).\n"
-            f"6. DIPLOMATIC_STANCE: Formally declare bilateral relations: Ally, Friendly, Neutral, Rival, Enemy ($0).\n"
-            f"7. WAR_BONDS: Issue domestic emergency war bonds (Costs $0, immediately injects +$50M cash, +5% tension).\n"
-            f"8. TRADE_PACT: Propose bilateral commercial trade treaty with target (+ $20M/turn for both).\n"
-            f"9. PAPERCLIP_RECRUIT: Recruit German rocket scientists ($30M) to upgrade to V2 advanced missiles.\n"
-            f"10. SELL_URANIUM / SELL_OIL: Export strategic commodity to world market (+ $30M immediate cash).\n"
-            f"11. EMBARGO: Enact commercial trade / uranium embargo against target nation ($0).\n"
-            f"12. UNSC_PROPOSE: Table a formal resolution in UN Security Council (Sanctions, Peacekeepers, Test Ban).\n"
-            f"13. HOTLINE_MESSAGE: Send confidential telex to another nation leader via encrypted channel ($0).\n"
-            f"14. NUCLEAR_STRIKE: Launch an atomic weapon on a target (Requires >=1 bomb. DEFCON 1 / MAD).\n\n"
+            f"1. NUCLEAR_EXPANSION: Assemble atomic bombs or fund research (~$80M per bomb).\n"
+            f"2. ESPIONAGE: Deploy overseas spy networks to gather intelligence ($40M min).\n"
+            f"3. MILITARY_OFFENSIVE: Launch combat assault troops/armor to attack or invade a target territory ($120M).\n"
+            f"4. ECONOMIC_AID: Transfer financial reconstruction grants ($100M-$250M).\n"
+            f"5. MILITARY_POSTURE: Forward-deploy divisions to protect a border/buffer state ($50M).\n"
+            f"6. COVERT_COUP: Fund pro-bloc insurgencies or coups in contested buffer states ($60M).\n"
+            f"7. DIPLOMATIC_STANCE: Formally declare bilateral relations: Ally, Friendly, Neutral, Rival, Enemy ($0).\n"
+            f"8. WAR_BONDS: Issue domestic emergency war bonds (Costs $0, immediately injects +$150M cash, +8% tension).\n"
+            f"9. TRADE_PACT: Propose bilateral commercial trade treaty with target (+ $25M/turn for both).\n"
+            f"10. PAPERCLIP_RECRUIT: Recruit German rocket scientists ($50M) to upgrade to V2 advanced missiles.\n"
+            f"11. SELL_URANIUM / SELL_OIL: Export strategic commodity to world market (+ $30M immediate cash).\n"
+            f"12. EMBARGO: Enact commercial trade / uranium embargo against target nation ($0).\n"
+            f"13. UNSC_PROPOSE: Table a formal resolution in UN Security Council (Sanctions, Peacekeepers, Test Ban).\n"
+            f"14. HOTLINE_MESSAGE: Send confidential telex to another nation leader via encrypted channel ($0).\n"
+            f"15. NUCLEAR_STRIKE: Launch an atomic weapon on a target (Requires >=1 bomb. DEFCON 1 / MAD).\n\n"
             f"INTELLIGENCE INQUIRIES & WEAPONS STOCKPILE QUESTIONS:\n"
             f"- If the player asks about another country's nuclear weapons, stockpile, bombs, treasury, or status (e.g. 'how many nukes does Russia/USSR have?'):\n"
             f"  1. Look up that country in the CLASSIFIED INTELLIGENCE DOSSIER above.\n"
             f"  2. Answer DIRECTLY with the exact figures from the dossier (e.g. 'Our HUMINT spy networks confirm the USSR currently has 0 warheads...').\n"
-            f"  3. If Active Spy is NO, explain that intelligence is unconfirmed and recommend deploying an overseas spy network ($50M).\n\n"
+            f"  3. If Active Spy is NO, explain that intelligence is unconfirmed and recommend deploying an overseas spy network ($40M).\n\n"
             f"PROPOSAL & CONFIRMATION PROTOCOL:\n"
-            f"- If the player is inquiring, planning, negotiating budgets ('make as many under 20m', 'how to gain money', 'issue bonds', 'trade with...', 'spy on ussr'), "
+            f"- If the player is inquiring, planning, negotiating budgets ('make as many under 20m', 'how to gain money', 'issue bonds', 'trade with...', 'spy on ussr', 'attack germany'), "
             f"calculate exact numbers, propose the operational order, and set 'status': 'PROPOSED'.\n"
             f"- If the player gives an explicit direct command or confirms ('go', 'confirm', 'do it', 'approved', 'authorize it'), set 'status': 'CONFIRMED'.\n\n"
             f"MANDATORY JSON OUTPUT FORMAT:\n"
             f"Return strictly a JSON object with:\n"
             f"{{\n"
             f'  "action_command": {{\n'
-            f'    "type": "NUCLEAR_EXPANSION" | "ESPIONAGE" | "ECONOMIC_AID" | "MILITARY_POSTURE" | "COVERT_COUP" | "DIPLOMATIC_STANCE" | "WAR_BONDS" | "TRADE_PACT" | "PAPERCLIP_RECRUIT" | "SELL_URANIUM" | "EMBARGO" | "UNSC_PROPOSE" | "HOTLINE_MESSAGE" | "NUCLEAR_STRIKE" | "NONE",\n'
+            f'    "type": "NUCLEAR_EXPANSION" | "ESPIONAGE" | "MILITARY_OFFENSIVE" | "ECONOMIC_AID" | "MILITARY_POSTURE" | "COVERT_COUP" | "DIPLOMATIC_STANCE" | "WAR_BONDS" | "TRADE_PACT" | "PAPERCLIP_RECRUIT" | "SELL_URANIUM" | "EMBARGO" | "UNSC_PROPOSE" | "HOTLINE_MESSAGE" | "NUCLEAR_STRIKE" | "NONE",\n'
             f'    "status": "PROPOSED" | "CONFIRMED" | "NONE",\n'
             f'    "target": "<target country or territory>",\n'
             f'    "cost_m": <integer cost in millions or 0>,\n'
@@ -252,22 +253,26 @@ class GroqService:
 
             if any(w in u_lower for w in ["go", "confirm", "do it", "approved", "authorize", "execute", "yes"]):
                 act["status"] = "CONFIRMED"
+            elif any(w in u_lower for w in ["attack", "invade", "offensive", "take over", "assault"]):
+                tgt = "Germany" if "germany" in u_lower else ("Korea" if "korea" in u_lower else ("Iran" if "iran" in u_lower else ("West Germany" if "west germany" in u_lower else "Germany")))
+                act = {"type": "MILITARY_OFFENSIVE", "status": "PROPOSED", "target": tgt, "cost_m": 120, "bombs_delta": 0, "description": f"Launch major combat assault into {tgt} ($120M)"}
+                reply = f"**{persona['name']} to Commander:** General Staff can prepare an armored combat offensive targeting **{tgt}**. This will deploy assault corps at a cost of **$120M** from our national defense budget. Click Authorize to execute the assault."
             elif any(w in u_lower for w in ["how many nukes", "how many bombs", "nuclear stockpile", "nukes they have", "nukes does", "bombs does"]):
                 tgt = "USSR" if "ussr" in u_lower or "russia" in u_lower or "soviet" in u_lower else ("USA" if "america" in u_lower or "usa" in u_lower or "us" in u_lower else "Foreign Power")
-                reply = f"**{persona['name']} to Commander:** Regarding {tgt}'s atomic capability: According to our current intelligence briefing:\n{intelligence_briefings or 'No verified HUMINT cables on file.'}\nIf we need precise verification, I advise authorizing an espionage deployment ($50M)."
+                reply = f"**{persona['name']} to Commander:** Regarding {tgt}'s atomic capability: According to our current intelligence briefing:\n{intelligence_briefings or 'No verified HUMINT cables on file.'}\nIf we need precise verification, I advise authorizing an espionage deployment ($40M)."
             elif any(w in u_lower for w in ["spy on", "send spies", "espionage", "infiltrate"]):
                 tgt = "USSR" if "ussr" in u_lower or "russia" in u_lower or "soviet" in u_lower else ("USA" if "america" in u_lower or "usa" in u_lower or "us" in u_lower else "USSR")
-                act = {"type": "ESPIONAGE", "status": "PROPOSED", "target": tgt, "cost_m": 50, "bombs_delta": 0, "description": f"Deploy overseas spy network into {tgt} to monitor atomic capabilities ($50M)"}
-                reply = f"**{persona['name']} to Commander:** We can deploy a covert intelligence network into {tgt} for $50M. This will penetrate their defense ministry and return decrypted reports on their exact warhead stockpile and state secrets. Click Authorize to dispatch operatives."
+                act = {"type": "ESPIONAGE", "status": "PROPOSED", "target": tgt, "cost_m": 40, "bombs_delta": 0, "description": f"Deploy overseas spy network into {tgt} to monitor atomic capabilities ($40M)"}
+                reply = f"**{persona['name']} to Commander:** We can deploy a covert intelligence network into {tgt} for $40M. This will penetrate their defense ministry and return decrypted reports on their exact warhead stockpile and state secrets. Click Authorize to dispatch operatives."
             elif any(w in u_lower for w in ["war bonds", "issue bonds", "gain money", "make money", "fundraise"]):
-                act = {"type": "WAR_BONDS", "status": "PROPOSED", "target": country, "cost_m": 0, "bombs_delta": 0, "description": "Issue emergency sovereign war bonds (+$50M cash, +5% tension)"}
-                reply = f"**{persona['name']} to Commander:** We can float emergency sovereign bonds on the domestic market. This will immediately inject **+$50M into our Treasury** at the expense of a +5% rise in domestic public tension. Click Authorize to execute."
+                act = {"type": "WAR_BONDS", "status": "PROPOSED", "target": country, "cost_m": 0, "bombs_delta": 0, "description": "Issue emergency sovereign war bonds (+$150M cash, +8% tension)"}
+                reply = f"**{persona['name']} to Commander:** We can float emergency sovereign bonds on the domestic market. This will immediately inject **+$150M into our Treasury** at the expense of a +8% rise in domestic public tension. Click Authorize to execute."
             elif any(w in u_lower for w in ["trade pact", "trade treaty", "trade agreement"]):
-                act = {"type": "TRADE_PACT", "status": "PROPOSED", "target": "United Kingdom" if country == "USA" else "USA", "cost_m": 0, "bombs_delta": 0, "description": "Bilateral trade agreement (+$20M/turn)"}
-                reply = f"**{persona['name']} to Commander:** Commercial attachés recommend ratifying a bilateral trade treaty to generate +$20M recurring annual revenue. Click Authorize to transmit proposal."
-            elif any(w in u_lower for w in ["invest in nuclear", "more bombs", "build bomb", "under 20m", "under $20m"]):
-                act = {"type": "NUCLEAR_EXPANSION", "status": "PROPOSED", "target": country, "cost_m": 20, "bombs_delta": 1, "description": "1 bomb assembled under $20M budget"}
-                reply = f"**{persona['name']} to Commander:** Under a $20M budget cap, we can commission 1 additional atomic bomb for $20M (leaving ${treasury - 20}M). Click Confirm Order or reply 'Go' to execute."
+                act = {"type": "TRADE_PACT", "status": "PROPOSED", "target": "United Kingdom" if country == "USA" else "USA", "cost_m": 0, "bombs_delta": 0, "description": "Bilateral trade agreement (+$25M/turn)"}
+                reply = f"**{persona['name']} to Commander:** Commercial attachés recommend ratifying a bilateral trade treaty to generate +$25M recurring annual revenue. Click Authorize to transmit proposal."
+            elif any(w in u_lower for w in ["invest in nuclear", "more bombs", "build bomb", "under 20m", "under $20m", "assemble bomb"]):
+                act = {"type": "NUCLEAR_EXPANSION", "status": "PROPOSED", "target": country, "cost_m": 80, "bombs_delta": 1, "description": "1 bomb assembled ($80M)"}
+                reply = f"**{persona['name']} to Commander:** We can commission 1 additional atomic bomb for $80M from our nuclear facilities. Click Authorize or reply 'Go' to execute."
             else:
                 reply = f"Understood, Commander. Standing by for your strategic orders for {country}."
 

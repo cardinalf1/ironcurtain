@@ -22,7 +22,7 @@ INITIAL_COUNTRIES = {
         "alignment": 1.0,
         "nuclear": True,
         "bombs": 2,
-        "treasury": 500,
+        "treasury": 2500,
         "tension": 10,
         "objective": "Contain Soviet expansion, support Western European recovery, and maintain atomic deterrence.",
         "capital": "Washington D.C.",
@@ -34,7 +34,7 @@ INITIAL_COUNTRIES = {
         "alignment": -1.0,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 250,
+        "treasury": 900,
         "tension": 15,
         "objective": "Consolidate Eastern European buffer states, complete atomic weapon R&D, and break capitalist encirclement.",
         "capital": "Moscow",
@@ -46,7 +46,7 @@ INITIAL_COUNTRIES = {
         "alignment": 0.7,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 120,
+        "treasury": 450,
         "tension": 20,
         "objective": "Rebuild domestic economy, sustain global strategic lifelines, and preserve Anglo-American alliance.",
         "capital": "London",
@@ -58,7 +58,7 @@ INITIAL_COUNTRIES = {
         "alignment": 0.4,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 100,
+        "treasury": 350,
         "tension": 30,
         "objective": "Restore national sovereignty, maintain control over colonial frontiers, and counter German resurgence.",
         "capital": "Paris",
@@ -70,7 +70,7 @@ INITIAL_COUNTRIES = {
         "alignment": -0.3,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 80,
+        "treasury": 200,
         "tension": 40,
         "objective": "Consolidate the Communist revolution, resist imperialist encroachment, and rebuild agrarian economy.",
         "capital": "Beijing",
@@ -82,7 +82,7 @@ INITIAL_COUNTRIES = {
         "alignment": 0.0,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 90,
+        "treasury": 180,
         "tension": 15,
         "objective": "Lead the Non-Aligned Movement, maintain complete sovereignty, and promote decolonization.",
         "capital": "New Delhi",
@@ -94,7 +94,7 @@ INITIAL_COUNTRIES = {
         "alignment": -0.6,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 70,
+        "treasury": 150,
         "tension": 25,
         "objective": "Pioneer self-managed socialism, resist Soviet domination, and secure economic independence.",
         "capital": "Belgrade",
@@ -106,7 +106,7 @@ INITIAL_COUNTRIES = {
         "alignment": -0.2,
         "nuclear": False,
         "bombs": 0,
-        "treasury": 50,
+        "treasury": 100,
         "tension": 20,
         "objective": "Protect national resources, resist external dominance, and navigate strategic Caribbean tensions.",
         "capital": "Havana",
@@ -117,15 +117,19 @@ INITIAL_COUNTRIES = {
 }
 
 INITIAL_BUFFERS = {
+    "Germany": {"alignment": 0.0, "lat": 51.16, "lon": 10.45},
     "West Germany": {"alignment": 0.8, "lat": 50.73, "lon": 7.1},
     "East Germany": {"alignment": -0.8, "lat": 52.52, "lon": 13.4},
     "Greece": {"alignment": 0.2, "lat": 37.98, "lon": 23.72},
     "Turkey": {"alignment": 0.3, "lat": 39.93, "lon": 32.85},
     "Iran": {"alignment": 0.0, "lat": 35.68, "lon": 51.38},
-    "Korea": {"alignment": 0.0, "lat": 37.56, "lon": 126.97}
+    "Korea": {"alignment": 0.0, "lat": 37.56, "lon": 126.97},
+    "Japan": {"alignment": 0.6, "lat": 35.68, "lon": 139.69},
+    "Poland": {"alignment": -0.7, "lat": 52.23, "lon": 21.01}
 }
 
 UNSC_PERM_5 = ["USA", "USSR", "United Kingdom", "France", "China"]
+MAX_DIRECTIVES_PER_TURN = 3
 
 class StateEngine:
     def __init__(self, db_path: str = DB_PATH):
@@ -403,6 +407,16 @@ class StateEngine:
                     title TEXT NOT NULL,
                     description TEXT NOT NULL,
                     effect_delta TEXT NOT NULL DEFAULT '{}'
+                )
+            """)
+
+            # Turn Submissions Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS turn_submissions (
+                    turn INTEGER NOT NULL,
+                    country TEXT NOT NULL,
+                    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (turn, country)
                 )
             """)
 
@@ -959,8 +973,8 @@ class StateEngine:
         - Payouts from bilateral trade agreements
         """
         BASE_TAX = {
-            "USA": 75, "USSR": 50, "United Kingdom": 35, "France": 30,
-            "China": 25, "India": 20, "Yugoslavia": 18, "Cuba": 15
+            "USA": 250, "USSR": 140, "United Kingdom": 80, "France": 60,
+            "China": 40, "India": 35, "Yugoslavia": 30, "Cuba": 20
         }
 
         with _db_lock:
@@ -1099,8 +1113,16 @@ class StateEngine:
         turn = world["turn"]
         dice_roll = secrets.randbelow(101)
 
+        # Enforce Directive Capacity (Max 3 orders per turn per country)
+        turn_orders = self.get_directive_count(country_name, turn)
+        if turn_orders >= MAX_DIRECTIVES_PER_TURN:
+            rej = f"Directive capacity reached: {country_name} has already issued {turn_orders}/{MAX_DIRECTIVES_PER_TURN} directives for Year {world['year']}. Directives are locked until year adjudication."
+            return False, rej, rej
+
         # 1. NUCLEAR EXPANSION (Build bombs / Uranium check / Potential test failure)
-        if act_type in ["NUCLEAR_EXPANSION", "NUCLEAR_RESEARCH", "BUILD_BOMBS"]:
+        if act_type in ["NUCLEAR_EXPANSION", "NUCLEAR_RESEARCH", "BUILD_BOMBS", "BUILD_BOMB"]:
+            if cost_m < 60:
+                cost_m = 80
             if cost_m > country["treasury"]:
                 rej = f"Insufficient funds: Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
                 return False, rej, rej
@@ -1119,12 +1141,16 @@ class StateEngine:
                                 '{"treasury": -20, "tension": 8}')
                     """, (turn, world["year"], country_name))
                     cursor.execute("""
+                        INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                        VALUES (?, ?, 'FAILED_NUCLEAR_TEST', ?, ?, 'Plutonium assembly criticality failure', ?)
+                    """, (turn, country_name, country_name, cost_m, dice_roll))
+                    cursor.execute("""
                         INSERT INTO map_events (turn, event_type, source_name, target_name, description)
                         VALUES (?, 'incident', ?, ?, 'CRITICALITY INCIDENT: Atomic assembly failure at secret facility.')
                     """, (turn, country_name, country_name))
                     conn.commit()
                     conn.close()
-                return True, f"⚠️ CRITICALITY ACCIDENT: Radiation accident during assembly. Allocated ${cost_m}M consumed; 0 warheads assembled.", None
+                return True, f"⚠️ CRITICALITY ACCIDENT: Radiation accident during assembly. Allocated ${cost_m}M consumed from treasury; 0 warheads assembled.", None
 
             with _db_lock:
                 conn = self._get_connection()
@@ -1145,7 +1171,7 @@ class StateEngine:
                 conn.commit()
                 conn.close()
 
-            return True, f"ATOMIC EXPANSION COMPLETE: Added +{bombs_delta} bomb(s). Allocated ${cost_m}M from defense reserves.", None
+            return True, f"⚛️ ATOMIC EXPANSION COMPLETE: Added +{bombs_delta} bomb(s). -${cost_m}M allocated from defense reserves (Remaining: ${country['treasury'] - cost_m}M).", None
 
         # 2. NUCLEAR STRIKE
         elif act_type == "NUCLEAR_STRIKE":
@@ -1162,6 +1188,10 @@ class StateEngine:
                 cursor.execute("UPDATE countries SET bombs = MAX(0, bombs - 1) WHERE name = ?", (country_name,))
                 cursor.execute("UPDATE world_state SET defcon = 1, global_tension = 100, mad_triggered = 1 WHERE id = 1")
                 cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'NUCLEAR_STRIKE', ?, 0, 'Strategic nuclear strike launched', 100)
+                """, (turn, country_name, target))
+                cursor.execute("""
                     INSERT INTO map_events (turn, event_type, source_name, target_name, description)
                     VALUES (?, 'strike', ?, ?, ?)
                 """, (turn, country_name, target, f"CRITICAL: {country_name} has launched an atomic strike on {target}! Global retaliation imminent."))
@@ -1174,13 +1204,57 @@ class StateEngine:
 
             return True, f"⚠️ ATOMIC STRIKE LAUNCHED: Strategic warhead detonated on {target}! DEFCON 1 and Mutually Assured Destruction triggered!", None
 
-        # 3. ESPIONAGE DEPLOYMENT
+        # 3. MILITARY OFFENSIVE / INVASION / ATTACK
+        elif act_type in ["MILITARY_OFFENSIVE", "INVASION", "ATTACK", "OFFENSIVE", "MILITARY_STRIKE", "WAR"]:
+            if cost_m < 100:
+                cost_m = 120
+            if cost_m > country["treasury"]:
+                rej = f"Insufficient funds: Combat offensive requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
+                return False, rej, rej
+
+            with _db_lock:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE countries SET treasury = treasury - ?, tension = tension + 10 WHERE name = ?", (cost_m, country_name))
+                cursor.execute("UPDATE world_state SET global_tension = MIN(100, global_tension + 15) WHERE id = 1")
+                
+                # Check if buffer state or full country
+                cursor.execute("SELECT alignment FROM buffer_states WHERE name = ?", (target,))
+                b_row = cursor.fetchone()
+                if b_row:
+                    shift = 0.5 if country["alignment"] > 0 else -0.5
+                    new_align = max(-1.0, min(1.0, b_row["alignment"] + shift))
+                    cursor.execute("UPDATE buffer_states SET alignment = ? WHERE name = ?", (new_align, target))
+                elif target in INITIAL_COUNTRIES:
+                    cursor.execute("UPDATE countries SET tension = MIN(100, tension + 20) WHERE name = ?", (target,))
+
+                cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'MILITARY_OFFENSIVE', ?, ?, ?, ?)
+                """, (turn, country_name, target, cost_m, f"Assault offensive on {target}: {desc}", dice_roll))
+
+                cursor.execute("""
+                    INSERT INTO map_events (turn, event_type, source_name, target_name, description)
+                    VALUES (?, 'strike', ?, ?, ?)
+                """, (turn, country_name, target, f"COMBAT INVASION: {country_name} forces launch combat operations into {target}!"))
+
+                cursor.execute("""
+                    INSERT INTO news_feed (turn, year, headline, body)
+                    VALUES (?, ?, 'ARMED CONFLICT: INVASION COMMENCED', ?)
+                """, (turn, world["year"], f"Urgent wire reports confirm {country_name} armed forces have launched combat operations into {target}."))
+
+                conn.commit()
+                conn.close()
+
+            return True, f"💥 COMBAT OFFENSIVE LAUNCHED into {target.upper()}! -${cost_m}M allocated from Defense Treasury (Remaining: ${country['treasury'] - cost_m}M). Assault vector active on theater map.", None
+
+        # 4. ESPIONAGE DEPLOYMENT
         elif act_type in ["ESPIONAGE", "ESPIONAGE_DEPLOY", "SPY"]:
+            if cost_m < 30:
+                cost_m = 40
             if cost_m > country["treasury"]:
                 rej = f"Insufficient funds: Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
                 return False, rej, rej
-            if cost_m < 50:
-                cost_m = 50
 
             with _db_lock:
                 conn = self._get_connection()
@@ -1219,7 +1293,7 @@ class StateEngine:
             )
 
             msg = (
-                f"🕵️ INTELLIGENCE ASSET INFILTRATED {target.upper()} (${cost_m}M allocated).\n\n"
+                f"🕵️ INTELLIGENCE ASSET INFILTRATED {target.upper()} (-${cost_m}M, Remaining: ${country['treasury'] - cost_m}M).\n\n"
                 f"**DECRYPTED FIELD INTELLIGENCE CABLE:**\n"
                 f"• **Atomic Warhead Stockpile:** {bombs_info}\n"
                 f"• **Nuclear Capability:** {nuke_status}\n"
@@ -1229,40 +1303,54 @@ class StateEngine:
             )
             return True, msg, None
 
-        # 4. ECONOMIC REVENUE: WAR BONDS (Gain cash)
+        # 5. ECONOMIC REVENUE: WAR BONDS (Gain cash)
         elif act_type in ["WAR_BONDS", "BONDS", "AUSTERITY"]:
-            bond_gain = 50
+            bond_gain = 150
             with _db_lock:
                 conn = self._get_connection()
                 cursor = conn.cursor()
-                cursor.execute("UPDATE countries SET treasury = treasury + ?, tension = tension + 5 WHERE name = ?", (bond_gain, country_name))
+                cursor.execute("UPDATE countries SET treasury = treasury + ?, tension = tension + 8 WHERE name = ?", (bond_gain, country_name))
+                cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'WAR_BONDS', ?, 0, 'Issued emergency sovereign bonds (+ $150M cash, +8% tension)', ?)
+                """, (turn, country_name, country_name, dice_roll))
                 cursor.execute("""
                     INSERT INTO news_feed (turn, year, headline, body)
                     VALUES (?, ?, 'FISCAL EXPANSION: WAR BONDS ISSUED', ?)
                 """, (turn, world["year"], f"{country_name} issues emergency domestic sovereign bonds, raising ${bond_gain}M."))
                 conn.commit()
                 conn.close()
-            return True, f"WAR BONDS ISSUED: Injected +${bond_gain}M into National Treasury (Domestic tension +5%).", None
+            return True, f"WAR BONDS ISSUED: Injected +${bond_gain}M cash into National Treasury (Current: ${country['treasury'] + bond_gain}M). Domestic tension +8%.", None
 
-        # 5. ECONOMIC REVENUE: TRADE PACT
+        # 6. ECONOMIC REVENUE: TRADE PACT
         elif act_type in ["TRADE_PACT", "COMMERCIAL_TREATY"]:
             with _db_lock:
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO trade_agreements (turn_signed, party_a, party_b, annual_value, resource_type, status)
-                    VALUES (?, ?, ?, 20, 'MANUFACTURES', 'ACTIVE')
+                    VALUES (?, ?, ?, 25, 'MANUFACTURES', 'ACTIVE')
                 """, (turn, country_name, target))
+                cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'TRADE_PACT', ?, 0, 'Ratified bilateral commerce pact (+$25M/turn)', ?)
+                """, (turn, country_name, target, dice_roll))
+                cursor.execute("""
+                    INSERT INTO map_events (turn, event_type, source_name, target_name, description)
+                    VALUES (?, 'aid', ?, ?, ?)
+                """, (turn, country_name, target, f"COMMERCIAL PACT: Bilateral trade treaty established between {country_name} and {target}."))
                 cursor.execute("""
                     INSERT INTO news_feed (turn, year, headline, body)
                     VALUES (?, ?, 'BILATERAL COMMERCE: TRADE PACT RATIFIED', ?)
                 """, (turn, world["year"], f"Bilateral commercial treaty signed between {country_name} and {target}, yielding mutual recurring revenue."))
                 conn.commit()
                 conn.close()
-            return True, f"TRADE TREATY RATIFIED: Commercial agreement established with {target} (+$20M/turn each).", None
+            return True, f"TRADE TREATY RATIFIED: Commercial agreement established with {target} (+$25M/turn each).", None
 
-        # 6. PAPERCLIP SCIENTIST RECRUITMENT (Missile Tech)
+        # 7. PAPERCLIP SCIENTIST RECRUITMENT (Missile Tech)
         elif act_type in ["PAPERCLIP_RECRUIT", "MISSILE_RESEARCH"]:
+            if cost_m < 30:
+                cost_m = 50
             if cost_m > country["treasury"]:
                 rej = f"Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
                 return False, rej, rej
@@ -1274,12 +1362,18 @@ class StateEngine:
                     SET treasury = treasury - ?, paperclip_scientists = paperclip_scientists + 1, missile_tech = 'V2_ADVANCED_MISSILES'
                     WHERE name = ?
                 """, (cost_m, country_name))
+                cursor.execute("""
+                    INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
+                    VALUES (?, ?, 'PAPERCLIP_RECRUIT', ?, ?, 'Recruited advanced rocketry scientists', ?)
+                """, (turn, country_name, country_name, cost_m, dice_roll))
                 conn.commit()
                 conn.close()
-            return True, f"ROCKET SCIENTISTS RECRUITED: Aerospace program advanced to V2_ADVANCED_MISSILES with ${cost_m}M investment.", None
+            return True, f"ROCKET SCIENTISTS RECRUITED: Aerospace program advanced to V2_ADVANCED_MISSILES (-${cost_m}M, Remaining: ${country['treasury'] - cost_m}M).", None
 
-        # 7. ECONOMIC AID
+        # 8. ECONOMIC AID
         elif act_type in ["ECONOMIC_AID", "AID", "LOAN"]:
+            if cost_m < 50:
+                cost_m = 100
             if cost_m > country["treasury"]:
                 rej = f"Insufficient funds: Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
                 return False, rej, rej
@@ -1290,6 +1384,10 @@ class StateEngine:
                 cursor.execute("UPDATE countries SET treasury = treasury - ? WHERE name = ?", (cost_m, country_name))
                 if target in INITIAL_COUNTRIES:
                     cursor.execute("UPDATE countries SET treasury = treasury + ? WHERE name = ?", (cost_m, target))
+                elif target in INITIAL_BUFFERS:
+                    shift = 0.3 if country["alignment"] > 0 else -0.3
+                    cursor.execute("UPDATE buffer_states SET alignment = alignment + ? WHERE name = ?", (shift, target))
+
                 cursor.execute("""
                     INSERT INTO pending_directives (turn, country, action_type, target, cost_m, description, dice_roll)
                     VALUES (?, ?, 'ECONOMIC_AID', ?, ?, ?, ?)
@@ -1301,16 +1399,18 @@ class StateEngine:
                 conn.commit()
                 conn.close()
 
-            return True, f"ECONOMIC CREDIT TRANSFERRED: ${cost_m}M transferred to {target}.", None
+            return True, f"ECONOMIC AID TRANSFERRED: -${cost_m}M transferred to {target} (Remaining Treasury: ${country['treasury'] - cost_m}M).", None
 
-        # 8. DIPLOMATIC STANCE
+        # 9. DIPLOMATIC STANCE
         elif act_type in ["DIPLOMATIC_STANCE", "STANCE"]:
             stance = action.get("stance", "Neutral")
             self.set_stance(country_name, target, stance)
             return True, f"DIPLOMATIC POSTURE: Stance toward {target} set to '{stance}'.", None
 
-        # 9. MILITARY POSTURE / REINFORCEMENT
+        # 10. MILITARY POSTURE / REINFORCEMENT
         else:
+            if cost_m < 30:
+                cost_m = 50
             if cost_m > country["treasury"]:
                 rej = f"Insufficient funds: Requires ${cost_m}M, but national treasury holds only ${country['treasury']}M."
                 return False, rej, rej
@@ -1330,7 +1430,7 @@ class StateEngine:
                 conn.commit()
                 conn.close()
 
-            return True, f"MILITARY POSTURE TRANSMITTED: Forward divisions reinforced along {target} frontier with ${cost_m}M.", None
+            return True, f"MILITARY POSTURE TRANSMITTED: Forward divisions reinforced along {target} frontier (-${cost_m}M, Remaining: ${country['treasury'] - cost_m}M).", None
 
     def submit_directive(self, country_name: str, action_type: str, cost_m: int, target: str, description: str) -> Tuple[bool, str]:
         action = {
@@ -1342,24 +1442,66 @@ class StateEngine:
         ok, msg, rej = self.execute_structured_action(country_name, action)
         return ok, msg or rej or ""
 
-    def get_pending_directives(self, turn: int) -> List[Dict[str, Any]]:
+    def get_pending_directives(self, turn: int, country: Optional[str] = None) -> List[Dict[str, Any]]:
         with _db_lock:
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM pending_directives WHERE turn = ?", (turn,))
+            if country:
+                cursor.execute("SELECT * FROM pending_directives WHERE turn = ? AND country = ?", (turn, country))
+            else:
+                cursor.execute("SELECT * FROM pending_directives WHERE turn = ?", (turn,))
             rows = cursor.fetchall()
             conn.close()
             return [dict(r) for r in rows]
 
-    def get_submission_status(self) -> Dict[str, bool]:
-        world = self.get_world_state()
-        turn = world["turn"]
+    def submit_turn(self, country_name: str, turn: Optional[int] = None) -> Tuple[bool, str]:
+        if turn is None:
+            turn = self.get_world_state()["turn"]
+        with _db_lock:
+            conn = self._get_connection()
+            conn.execute("""
+                INSERT INTO turn_submissions (turn, country)
+                VALUES (?, ?)
+                ON CONFLICT(turn, country) DO NOTHING
+            """, (turn, country_name))
+            conn.commit()
+            conn.close()
+        return True, f"{country_name} directives officially submitted for Turn {turn}."
+
+    def is_turn_submitted(self, country_name: str, turn: Optional[int] = None) -> bool:
+        if turn is None:
+            turn = self.get_world_state()["turn"]
         with _db_lock:
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT country FROM pending_directives WHERE turn = ?", (turn,))
-            submitted = {r[0] for r in cursor.fetchall()}
+            cursor.execute("SELECT COUNT(*) FROM turn_submissions WHERE turn = ? AND country = ?", (turn, country_name))
+            count = cursor.fetchone()[0]
             conn.close()
+            return count > 0
+
+    def get_directive_count(self, country_name: str, turn: Optional[int] = None) -> int:
+        if turn is None:
+            turn = self.get_world_state()["turn"]
+        with _db_lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM pending_directives WHERE country = ? AND turn = ?", (country_name, turn))
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count
+
+    def get_submission_status(self, turn: Optional[int] = None) -> Dict[str, bool]:
+        if turn is None:
+            turn = self.get_world_state()["turn"]
+        with _db_lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT country FROM turn_submissions WHERE turn = ?", (turn,))
+            explicit_subs = {r[0] for r in cursor.fetchall()}
+            cursor.execute("SELECT DISTINCT country FROM pending_directives WHERE turn = ?", (turn,))
+            directive_subs = {r[0] for r in cursor.fetchall()}
+            conn.close()
+            submitted = explicit_subs.union(directive_subs)
             return {c: (c in submitted) for c in INITIAL_COUNTRIES}
 
     def add_intel_cable(self, turn: int, recipient: str, target: str, summary: str, apparent_data: str, confidence: str, status: str):

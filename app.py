@@ -186,6 +186,35 @@ def render_strategic_map(highlight_target: Optional[str] = None):
     )
 
     # 3D Geopolitical Strategic Arcs (Transatlantic, Sino-Soviet, Deterrence, Operations)
+    all_locs = {}
+    for cn, cd in countries.items():
+        all_locs[cn] = {"lat": cd["lat"], "lon": cd["lon"]}
+    for bn, bd in buffers.items():
+        all_locs[bn] = {"lat": bd["lat"], "lon": bd["lon"]}
+
+    canonical_aliases = {
+        "Germany": {"lat": 51.16, "lon": 10.45},
+        "East Germany": {"lat": 52.0, "lon": 12.5},
+        "West Germany": {"lat": 50.5, "lon": 9.5},
+        "Japan": {"lat": 36.2, "lon": 138.25},
+        "Korea": {"lat": 38.0, "lon": 127.5},
+        "North Korea": {"lat": 39.0, "lon": 125.75},
+        "South Korea": {"lat": 37.5, "lon": 127.0},
+        "Poland": {"lat": 51.91, "lon": 19.14},
+        "Iran": {"lat": 32.42, "lon": 53.68},
+        "Turkey": {"lat": 38.96, "lon": 35.24},
+        "Greece": {"lat": 39.07, "lon": 21.82},
+        "Austria": {"lat": 47.51, "lon": 14.55},
+        "Czechoslovakia": {"lat": 49.81, "lon": 15.47},
+        "Russia": all_locs.get("USSR", {"lat": 55.75, "lon": 37.61}),
+        "America": all_locs.get("USA", {"lat": 38.89, "lon": -77.03}),
+        "Britain": all_locs.get("United Kingdom", {"lat": 51.50, "lon": -0.12}),
+        "UK": all_locs.get("United Kingdom", {"lat": 51.50, "lon": -0.12})
+    }
+    for k, v in canonical_aliases.items():
+        if k not in all_locs:
+            all_locs[k] = v
+
     arc_data = []
     
     # 1. Permanent Strategic Geopolitical Lifelines
@@ -198,9 +227,9 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         ("USSR", "Yugoslavia", [163, 113, 247, 200], "Danubian Diplomatic Lifeline"),
     ]
     for src_n, tgt_n, col, desc in base_arcs:
-        if src_n in countries and tgt_n in countries:
-            s = countries[src_n]
-            t = countries[tgt_n]
+        if src_n in all_locs and tgt_n in all_locs:
+            s = all_locs[src_n]
+            t = all_locs[tgt_n]
             arc_data.append({
                 "from_lon": s["lon"], "from_lat": s["lat"],
                 "to_lon": t["lon"], "to_lat": t["lat"],
@@ -212,21 +241,30 @@ def render_strategic_map(highlight_target: Optional[str] = None):
 
     # 2. Dynamic map events flight arcs
     map_events = state_engine.get_map_events()
-    for ev in map_events[:16]:
+    for ev in map_events[:20]:
         src_name = ev.get("source_name")
         tgt_name = ev.get("target_name")
-        if src_name in countries and tgt_name in countries:
-            src = countries[src_name]
-            tgt = countries[tgt_name]
-            ev_type = ev.get("event_type", "")
-            arc_color = [248, 81, 73, 255] if "strike" in ev_type else ([210, 153, 34, 250] if "espionage" in ev_type else [46, 160, 67, 240])
+        if src_name in all_locs and tgt_name in all_locs:
+            src = all_locs[src_name]
+            tgt = all_locs[tgt_name]
+            ev_type = (ev.get("event_type") or "").lower()
+            if any(k in ev_type for k in ["strike", "offensive", "attack", "invasion", "military"]):
+                arc_color = [248, 81, 73, 255] # Crimson Combat Assault
+                align_tag = "Tactical Military Vector"
+            elif any(k in ev_type for k in ["espionage", "spy", "intel"]):
+                arc_color = [210, 153, 34, 250] # Amber HUMINT Infiltration
+                align_tag = "Intelligence Vector"
+            else:
+                arc_color = [46, 160, 67, 240] # Emerald Foreign Aid / Trade
+                align_tag = "Economic / Treaty Vector"
+
             arc_data.append({
                 "from_lon": src["lon"], "from_lat": src["lat"],
                 "to_lon": tgt["lon"], "to_lat": tgt["lat"],
                 "color": arc_color,
                 "name": f"ACTIVE OPERATION: {src_name} ➔ {tgt_name}",
                 "status": ev.get("description", "Field Operation"),
-                "alignment": "Operational Vector"
+                "alignment": align_tag
             })
 
     # 3. Active Spy Network Infiltration Arcs
@@ -234,9 +272,9 @@ def render_strategic_map(highlight_target: Optional[str] = None):
     for sp in active_spies:
         o = sp.get("owner_country")
         t = sp.get("target")
-        if o in countries and t in countries:
-            s = countries[o]
-            tgt = countries[t]
+        if o in all_locs and t in all_locs:
+            s = all_locs[o]
+            tgt = all_locs[t]
             arc_data.append({
                 "from_lon": s["lon"], "from_lat": s["lat"],
                 "to_lon": tgt["lon"], "to_lat": tgt["lat"],
@@ -284,6 +322,23 @@ def render_strategic_map(highlight_target: Optional[str] = None):
         map_style=None
     )
     st.pydeck_chart(deck, use_container_width=True)
+
+    # Tactical Map Legend
+    st.markdown(
+        "<div class='hud-panel' style='margin-top: -6px; margin-bottom: 12px; padding: 8px 14px; font-size: 0.8rem; background: #0c1017; border-color: #21262d;'>"
+        "<div style='font-family: var(--font-mono); font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;'>"
+        "📡 STRATEGIC ARCS & TACTICAL VECTORS DIRECTORY:"
+        "</div>"
+        "<div style='display: flex; flex-wrap: wrap; gap: 16px; line-height: 1.5;'>"
+        "<span><b style='color: #f85149;'>━━━ Crimson Arc:</b> Military Offensives, Strikes & Armed Invasions</span>"
+        "<span><b style='color: #d29922;'>━━━ Amber Arc:</b> Infiltrated HUMINT Spy Rings & Nuclear Espionage</span>"
+        "<span><b style='color: #58a6ff;'>━━━ Blue Arc:</b> Western Defense Treaties & Bilateral Alliances</span>"
+        "<span><b style='color: #2ea043;'>━━━ Emerald Arc:</b> Foreign Financial Aid & Commercial Trade Pacts</span>"
+        "<span><b style='color: #a371f7;'>━━━ Purple Arc:</b> Non-Aligned Diplomatic Channels</span>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
 
 
 # ==============================================================================
@@ -363,7 +418,7 @@ if selected_view == "🏛️ PROJECTOR / UN JOINT CHIEFS":
 
         st.markdown("<div class='hud-panel'>", unsafe_allow_html=True)
         st.markdown("<b>NATION SUBMISSION STATUS:</b>", unsafe_allow_html=True)
-        sub_status = state_engine.get_submission_status()
+        sub_status = state_engine.get_submission_status(world["turn"])
         ready_count = sum(sub_status.values())
         st.progress(ready_count / len(sub_status), text=f"{ready_count} of {len(sub_status)} Powers Submitted")
 
@@ -422,10 +477,10 @@ if selected_view == "🏛️ PROJECTOR / UN JOINT CHIEFS":
                         year=world["year"],
                         turn=world["turn"],
                         real_history=hist_ref["summary"],
-                        sim_history=hm.get("simulated_summary", "Year evaluated."),
-                        divergence=hm.get("divergence_analysis", "Course diverged from history."),
-                        questions=hm.get("discussion_questions", ["What was the primary driver of tension?"]),
-                        legacy=hm.get("legacy_verdict", "Strategic balance preserved.")
+                        sim_history=(hm.get("sim_summary") or hm.get("simulated_summary") or f"In Year {world['year']}, world powers issued {len(directives)} major directives and shifted geopolitical spheres of influence across the globe."),
+                        divergence=(hm.get("divergence_analysis") or hm.get("divergence") or "Course diverged dynamically based on player directives."),
+                        questions=(hm.get("discussion_questions") or ["What was the primary driver of tension this cycle?"]),
+                        legacy=(hm.get("legacy_verdict") or "Strategic balance preserved through deterrence.")
                     )
 
                 st.success(f"Turn {world['turn']} Adjudicated! Proceed to Year {world['year'] + 1}.")
@@ -609,6 +664,8 @@ else:
     # --------------------------------------------------------------------------
     is_p5 = country_name in UNSC_PERM_5
     cables_count = len(state_engine.get_intel_cables(country_name))
+    orders_count = state_engine.get_directive_count(country_name, world["turn"])
+    is_submitted = state_engine.is_turn_submitted(country_name, world["turn"])
 
     col_hdr_left, col_hdr_right = st.columns([7, 5])
     with col_hdr_left:
@@ -619,35 +676,46 @@ else:
             f"HEAD OF MISSION: <b>{persona['name']}</b> ({persona['title']}) • CAPITAL: {c_data['capital']}"
             f"</span><br/>"
             f"<span class='badge-c2 {'badge-unsc' if is_p5 else 'badge-conf'}'>{'UNSC PERM-5 (VETO)' if is_p5 else 'UN GENERAL MEMBER'}</span> "
-            f"<span class='badge-c2 {'badge-secret' if c_data['nuclear'] else 'badge-conf'}'>{'ATOMIC CAPABLE' if c_data['nuclear'] else 'CONVENTIONAL'}</span>"
+            f"<span class='badge-c2 {'badge-secret' if c_data['nuclear'] else 'badge-conf'}'>{'ATOMIC CAPABLE' if c_data['nuclear'] else 'CONVENTIONAL'}</span> "
+            f"<span class='badge-c2' style='background: {'#238636' if is_submitted else '#1f6feb'}; color: white;'>{'STATUS: SUBMITTED' if is_submitted else f'ORDERS: {orders_count}/3'}</span>"
             f"</div>",
             unsafe_allow_html=True
         )
 
     with col_hdr_right:
         st.markdown("<div style='display: flex; gap: 8px; justify-content: flex-end; align-items: center; height: 100%;'>", unsafe_allow_html=True)
-        btn_c1, btn_c2 = st.columns(2)
+        btn_c0, btn_c1, btn_c2 = st.columns([4, 4, 4])
+        with btn_c0:
+            if is_submitted:
+                st.button("✅ SUBMITTED", disabled=True, key=f"sub_btn_{country_name}", use_container_width=True)
+            else:
+                if st.button(f"🏁 SUBMIT TURN ({orders_count}/3)", type="primary", key=f"sub_btn_{country_name}", use_container_width=True):
+                    state_engine.submit_turn(country_name, world["turn"])
+                    st.toast(f"Strategic orders submitted for {country_name}!")
+                    st.rerun()
         with btn_c1:
-            if st.button("📞 RED PHONE HOTLINE", use_container_width=True):
+            if st.button("📞 RED PHONE", use_container_width=True):
                 show_red_phone_dialog(country_name, countries)
         with btn_c2:
-            if st.button(f"🔔 NOTIFICATIONS ({cables_count})", use_container_width=True):
+            if st.button(f"🔔 ALERTS ({cables_count})", use_container_width=True):
                 show_notifications_dialog(country_name)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # Telemetry Ribbon
-    t1, t2, t3, t4, t5, t6 = st.columns(6)
+    t1, t2, t3, t4, t5, t6, t7 = st.columns(7)
     with t1:
         st.markdown(f"<div class='metric-box'><div class='metric-label'>TREASURY</div><div class='metric-val metric-val-mono'>${c_data['treasury']}M</div></div>", unsafe_allow_html=True)
     with t2:
         st.markdown(f"<div class='metric-box'><div class='metric-label'>WARHEADS</div><div class='metric-val metric-val-mono'>{c_data['bombs']}</div></div>", unsafe_allow_html=True)
     with t3:
-        st.markdown(f"<div class='metric-box'><div class='metric-label'>URANIUM</div><div class='metric-val'>{c_data.get('uranium', 0)} MT</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-box'><div class='metric-label'>ORDERS</div><div class='metric-val metric-val-mono' style='color: {'#f85149' if orders_count >= 3 else '#58a6ff'};'>{orders_count}/3</div></div>", unsafe_allow_html=True)
     with t4:
-        st.markdown(f"<div class='metric-box'><div class='metric-label'>OIL SUPPLY</div><div class='metric-val'>{c_data.get('oil', 50)}%</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-box'><div class='metric-label'>URANIUM</div><div class='metric-val'>{c_data.get('uranium', 0)} MT</div></div>", unsafe_allow_html=True)
     with t5:
-        st.markdown(f"<div class='metric-box'><div class='metric-label'>STABILITY</div><div class='metric-val'>{c_data.get('domestic_approval', 75)}%</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-box'><div class='metric-label'>OIL SUPPLY</div><div class='metric-val'>{c_data.get('oil', 50)}%</div></div>", unsafe_allow_html=True)
     with t6:
+        st.markdown(f"<div class='metric-box'><div class='metric-label'>STABILITY</div><div class='metric-val'>{c_data.get('domestic_approval', 75)}%</div></div>", unsafe_allow_html=True)
+    with t7:
         st.markdown(f"<div class='metric-box'><div class='metric-label'>TENSION</div><div class='metric-val'>{c_data['tension']}%</div></div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
@@ -694,36 +762,43 @@ else:
     # --------------------------------------------------------------------------
     st.markdown("---")
     st.markdown(f"#### 🎙️ AI ADVISER CONSOLE // {persona['name'].upper()}")
-    st.caption(f"Instruct your senior adviser in plain English. Inquire about foreign nuclear stockpiles, authorize espionage operations, commission warheads, or negotiate treaties.")
+    st.caption(f"Instruct your senior adviser in plain English. Maximum 3 directives per cycle. Treasury reserves fund all military, intelligence, and diplomatic actions.")
+
+    if orders_count >= 3:
+        st.warning(f"⚠️ **DIRECTIVE CAPACITY REACHED (3/3):** {country_name} has dispatched all authorized directives for Turn Cycle {world['turn']}. Click '🏁 SUBMIT TURN' above to lock in your strategy.")
 
     # Quick Tactical Directive Chips
     st.markdown("<span style='font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);'>QUICK TACTICAL DIRECTIVES:</span>", unsafe_allow_html=True)
-    c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns(5)
+    c_btn0, c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns(6)
+    with c_btn0:
+        if st.button(f"⚔️ Attack {inspected_target} ($120M)", use_container_width=True, disabled=(orders_count >= 3)):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Launch a military offensive / attack on {inspected_target} ($120M budget)"
+            st.rerun()
     with c_btn1:
-        if st.button(f"🕵️ Spy on {inspected_target} ($50M)", use_container_width=True):
-            st.session_state[f"staged_cmd_{country_name}"] = f"Deploy an intelligence spy network to {inspected_target} ($50M) to check their nuclear weapons stockpile and capability"
+        if st.button(f"🕵️ Spy on {inspected_target} ($40M)", use_container_width=True, disabled=(orders_count >= 3)):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Deploy an intelligence spy network to {inspected_target} ($40M) to check their nuclear weapons stockpile and capability"
             st.rerun()
     with c_btn2:
-        if st.button(f"⚛️ Commission Bomb ($20M)", use_container_width=True):
-            st.session_state[f"staged_cmd_{country_name}"] = f"Assemble 1 atomic bomb under $20M budget"
+        if st.button(f"⚛️ Commission Bomb ($80M)", use_container_width=True, disabled=(orders_count >= 3)):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Assemble 1 atomic bomb under $80M budget"
             st.rerun()
     with c_btn3:
-        if st.button(f"💵 War Bonds (+$50M)", use_container_width=True):
-            st.session_state[f"staged_cmd_{country_name}"] = f"Issue emergency sovereign war bonds to raise $50M cash"
+        if st.button(f"💵 War Bonds (+$150M)", use_container_width=True, disabled=(orders_count >= 3)):
+            st.session_state[f"staged_cmd_{country_name}"] = f"Issue emergency sovereign war bonds to raise $150M cash"
             st.rerun()
     with c_btn4:
-        if st.button(f"🤝 Trade Pact with {inspected_target}", use_container_width=True):
+        if st.button(f"🤝 Trade Pact with {inspected_target}", use_container_width=True, disabled=(orders_count >= 3)):
             st.session_state[f"staged_cmd_{country_name}"] = f"Propose a bilateral commercial trade pact with {inspected_target}"
             st.rerun()
     with c_btn5:
-        if st.button(f"📜 UNSC Sanction on {inspected_target}", use_container_width=True):
+        if st.button(f"📜 UNSC Sanction on {inspected_target}", use_container_width=True, disabled=(orders_count >= 3)):
             st.session_state[f"staged_cmd_{country_name}"] = f"Table a formal resolution in the UN Security Council against {inspected_target}"
             st.rerun()
 
     chat_key = f"chat_history_{country_name}"
     if chat_key not in st.session_state:
         st.session_state[chat_key] = [
-            {"role": "assistant", "content": f"Commander, {persona['name']} standing by. The year is {world['year']}. You hold ${c_data['treasury']}M in Treasury reserves and {c_data['bombs']} atomic warheads. Instruct me on our nuclear expansion, intelligence operations, or diplomatic moves."}
+            {"role": "assistant", "content": f"Commander, {persona['name']} standing by. The year is {world['year']}. You hold ${c_data['treasury']}M in Treasury reserves, {c_data['bombs']} atomic warheads, and have issued {orders_count}/3 directives this cycle. Instruct me on our nuclear expansion, intelligence operations, military maneuvers, or diplomatic treaties."}
         ]
 
     # Staged quick commands
@@ -756,7 +831,10 @@ else:
             if st.button("🚀 AUTHORIZE & EXECUTE ORDER", type="primary", use_container_width=True):
                 success, exec_msg, rej = state_engine.execute_structured_action(country_name, prop)
                 st.session_state[proposal_key] = None
-                conf_reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
+                if success:
+                    conf_reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
+                else:
+                    conf_reply = f"**{persona['name']} to Commander:** Directive ABORTED.\n\n⚠️ {rej or exec_msg}"
                 st.session_state[chat_key].append({"role": "assistant", "content": conf_reply})
                 st.rerun()
         with col_auth2:
@@ -765,7 +843,7 @@ else:
                 st.rerun()
 
     # Chat Input
-    user_prompt = st.chat_input(f"Instruct {persona['name']} (e.g. 'How many nukes does Russia have?', 'Spy on USSR', 'Build 2 bombs', 'Authorize')...")
+    user_prompt = st.chat_input(f"Instruct {persona['name']} (e.g. 'Attack Germany', 'Spy on USSR', 'Build bomb', 'Authorize')...")
     if staged_val and not user_prompt:
         user_prompt = staged_val
 
@@ -778,7 +856,10 @@ else:
             prop = st.session_state[proposal_key]
             success, exec_msg, rejection = state_engine.execute_structured_action(country_name, prop)
             st.session_state[proposal_key] = None
-            reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
+            if success:
+                reply = f"**{persona['name']} to Commander:** Directive confirmed and executed.\n\n{exec_msg}"
+            else:
+                reply = f"**{persona['name']} to Commander:** Directive ABORTED.\n\n⚠️ {rejection or exec_msg}"
             st.session_state[chat_key].append({"role": "assistant", "content": reply})
             st.rerun()
 
@@ -801,6 +882,8 @@ else:
             st.session_state[proposal_key] = None
             if success and exec_msg:
                 reply += f"\n\n**[OPERATIONAL EXECUTION CONFIRMED]:**\n{exec_msg}"
+            else:
+                reply += f"\n\n**[DIRECTIVE ABORTED]:**\n⚠️ {rejection or exec_msg}"
         elif act_type not in ["NONE", "", "ADVISORY"]:
             st.session_state[proposal_key] = action_cmd
 
