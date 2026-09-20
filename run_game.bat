@@ -1,11 +1,13 @@
 @echo off
-title The Iron Curtain - Cold War Geopolitics Simulator
-echo ===================================================
-echo   THE IRON CURTAIN: MULTIPLAYER CLASSROOM SIMULATOR
-echo ===================================================
+title The Iron Curtain - Cold War Simulation Platform
+echo ===============================================================================
+echo   THE IRON CURTAIN // MULTIPLAYER COLD WAR CLASSROOM GEOPOLITICS SIMULATOR
+echo   Powered by Open-Historia 3D Canvas Map + Palantir C2 Strategic Defense Console
+echo ===============================================================================
 echo.
-echo Launching local server bound to 0.0.0.0:8501...
-echo Students can connect from any LAN device via http://^<host-ip^>:8501
+echo Starting C2 Classroom Server on http://localhost:3000 ...
+echo LAN access enabled for students across classroom devices.
 echo.
-.venv\Scripts\streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+start "" http://localhost:3000
+node server/server.js
 pause
