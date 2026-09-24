@@ -321,3 +321,131 @@ div[data-testid="stExpander"] {
   background-color: var(--panel-bg) !important;
   border-radius: 6px !important;
 }
+
+/* DEFCON Protocol Levels & Active Dynamic Highlighting */
+.defcon-box {
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-card);
+  color: var(--text-dim);
+  transition: all 0.25s ease-in-out;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.defcon-box.active {
+  font-weight: 700;
+  transform: translateX(4px);
+}
+
+.defcon-5.active {
+  border-color: #2ea043 !important;
+  background: rgba(46, 160, 67, 0.15) !important;
+  color: #3fb950 !important;
+  box-shadow: 0 0 12px rgba(46, 160, 67, 0.35) !important;
+}
+
+.defcon-4.active {
+  border-color: #388bfd !important;
+  background: rgba(56, 139, 253, 0.15) !important;
+  color: #58a6ff !important;
+  box-shadow: 0 0 12px rgba(56, 139, 253, 0.35) !important;
+}
+
+.defcon-3.active {
+  border-color: #d29922 !important;
+  background: rgba(210, 153, 34, 0.18) !important;
+  color: #e3b341 !important;
+  box-shadow: 0 0 14px rgba(210, 153, 34, 0.4) !important;
+}
+
+.defcon-2.active {
+  border-color: #db6d28 !important;
+  background: rgba(219, 109, 40, 0.22) !important;
+  color: #ffa657 !important;
+  box-shadow: 0 0 16px rgba(219, 109, 40, 0.45) !important;
+}
+
+.defcon-1.active {
+  border-color: #f85149 !important;
+  background: rgba(248, 81, 73, 0.28) !important;
+  color: #ff7b72 !important;
+  box-shadow: 0 0 20px rgba(248, 81, 73, 0.65) !important;
+  animation: pulse-danger 1.8s infinite ease-in-out;
+}
+
+/* Country Specialty & Doctrine Card */
+.specialty-card {
+  background: linear-gradient(135deg, rgba(18, 24, 34, 0.95), rgba(24, 32, 45, 0.95));
+  border: 1px solid var(--panel-border-light);
+  border-left: 4px solid var(--accent-cyan);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+.specialty-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent-cyan);
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+}
+
+.specialty-doctrine {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent-amber);
+  margin-bottom: 8px;
+}
+
+.specialty-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.specialty-traits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.specialty-trait-pill {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  color: var(--text-main);
+  background: rgba(57, 197, 207, 0.08);
+  border-left: 2px solid var(--accent-cyan);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* Bilateral Treaty & Pact Proposal Card */
+.pact-card {
+  background: rgba(24, 32, 45, 0.9);
+  border: 1px solid var(--panel-border-light);
+  border-left: 3px solid var(--accent-amber);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.pact-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent-amber);
+  margin-bottom: 6px;
+}
+
